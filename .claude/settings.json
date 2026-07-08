@@ -1,0 +1,87 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Write",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(chmod +x *)",
+      "Bash(ls *)",
+      "Bash(./script.sh *)",
+      "Bash(/home/yuvalk/HWSW/HWSW_HW2/script.sh *)",
+      "Bash(profiling/run_perf_traditional.sh *)",
+      "Bash(profiling/run_perf_faas.sh *)",
+      "Bash(profiling/make_flamegraph.sh *)",
+      "Bash(profiling/flamegraph/fetch.sh *)",
+      "Bash(common/cpp/build.sh *)",
+      "Bash(common/cpp/build/accelerator *)",
+      "Bash(python3 -m Traditional.server *)",
+      "Bash(python3 -m FaaS.gateway *)",
+      "Bash(python3 -m common.workload *)",
+      "Bash(python3 -m common.compare_states *)",
+      "Bash(python3 tools/sync_status.py *)",
+      "Bash(perf stat *)",
+      "Bash(perf record *)",
+      "Bash(perf script *)"
+    ],
+    "deny": [
+      "Read(/home/yuvalk/spec2017/**)",
+      "Edit(/home/yuvalk/spec2017/**)",
+      "Write(/home/yuvalk/spec2017/**)",
+      "Read(/home/yuvalk/MBMM/**)",
+      "Edit(/home/yuvalk/MBMM/**)",
+      "Write(/home/yuvalk/MBMM/**)",
+      "Read(/home/yuvalk/mem_project/**)",
+      "Edit(/home/yuvalk/mem_project/**)",
+      "Write(/home/yuvalk/mem_project/**)",
+      "Read(/home/yuvalk/home/**)",
+      "Edit(/home/yuvalk/home/**)",
+      "Write(/home/yuvalk/home/**)",
+      "Read(/home/yuvalk/snap/**)",
+      "Edit(/home/yuvalk/snap/**)",
+      "Write(/home/yuvalk/snap/**)",
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(git reset --hard *)",
+      "Bash(git checkout -- *)",
+      "Bash(rm -rf *)"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/yuvalk/HWSW/HWSW_HW2/tools/log_prompt_hook.py 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/yuvalk/HWSW/HWSW_HW2/tools/sync_status_hook.py 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /home/yuvalk/HWSW/HWSW_HW2/tools/inject_project_context_hook.py"
+          }
+        ]
+      }
+    ]
+  }
+}

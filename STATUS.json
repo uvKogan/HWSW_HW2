@@ -1,0 +1,55 @@
+{
+  "_comment": "Source of truth for project status. Don't hand-edit `parts`/`scenario` here directly -- use `python3 tools/sync_status.py set-part ...` / `set-scenario ...`, which updates this file AND regenerates the matching section of PROJECT.md so the two can't drift. If you do hand-edit this file, a hook regenerates PROJECT.md automatically on save.",
+  "team": [
+    "Matan Cohen",
+    "Yuval Kogan"
+  ],
+  "last_updated": "2026-07-09",
+  "scenario": null,
+  "scenario_options": [
+    "hospital",
+    "hotel",
+    "airport",
+    "university_courses",
+    "other"
+  ],
+  "parts": {
+    "infra_scaffold": {
+      "status": "done",
+      "notes": "Generic placeholder operations, not scenario-specific yet"
+    },
+    "scenario_selection": {
+      "status": "not_started",
+      "notes": "Blocks renaming the 7 ops to real ones"
+    },
+    "part1_traditional": {
+      "status": "not_started",
+      "notes": "Skeleton exists (Traditional/), needs real ops + a couple runs of the HTTP server mode to demo it's a \"real\" server"
+    },
+    "part2_faas": {
+      "status": "not_started",
+      "notes": "Skeleton exists (FaaS/), needs real ops"
+    },
+    "part3_feature_extension": {
+      "status": "not_started",
+      "notes": "Needs feature choice; C++ accelerator stub ready if the feature is compute-heavy"
+    },
+    "part4_performance": {
+      "status": "not_started",
+      "notes": "Scripts ready (profiling/); untested on a machine with perf installed (this dev sandbox doesn't have it)"
+    },
+    "part5_security_maintainability": {
+      "status": "optional_not_started",
+      "notes": "Course amendment marked this + flamegraphs as removed; do if time allows"
+    },
+    "report": {
+      "status": "not_started",
+      "notes": "report/report.typ + report/ids.typ skeletons exist (Typst, not installed in this sandbox)"
+    }
+  },
+  "blockers": [
+    "perf not installed in dev sandbox (needed for part4_performance)",
+    "typst not installed in dev sandbox (needed for report compile)",
+    "scenario not chosen (blocks renaming common/operations.py's 7 placeholder ops)"
+  ]
+}
