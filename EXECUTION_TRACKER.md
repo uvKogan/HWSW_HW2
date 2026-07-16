@@ -139,18 +139,19 @@ commit boundary.
       Linux in Phase F.
 - [x] **COMMIT**: "Add concurrency experiments: seat-race (Traditional) + parallel throughput (FaaS)"
 
-### Phase E — Docs
-- [x] E1. `STATUS.json`: scenario set to "Olympic Games Management
-      System"; Part 5 marked skipped. *(done)*
-- [ ] E2. `PROJECT.md`: refresh architecture-decisions (drop C++, add the
-      four-axis thesis), rewrite "Open decisions / TODO", add AI-usage-log
-      rows for the planning rounds.
-- [ ] E3. `README.md`: quickstart — scenario, prereqs (stdlib Python;
-      Linux for perf), how to run the pipeline + the two benchmarks,
-      directory map, pointer to `PROJECT.md`.
-- [ ] E4. `report/report.typ`: fill "System Scenario" (9 base ops +
-      reference-data layer; `go_live`, `project_medals` called out).
-- **COMMIT**: "Update docs for Olympics scenario"
+### Phase E — Docs — DONE
+- [x] E1. `STATUS.json`: scenario set; Part 5 marked skipped.
+- [x] E2. `PROJECT.md`: architecture-decisions refreshed (C++ dropped,
+      four-axis thesis added), "Open decisions" rewritten, AI-usage-log rows
+      added.
+- [x] E3. `README.md`: full quickstart (scenario, ops, prereqs, run
+      commands, layout).
+- [x] Cleanup: removed `common/cpp/`; rewrote `script.sh` (op tests + both
+      architectures + correctness gate + both concurrency experiments +
+      optional perf; `PYTHON=` override for Windows). Verified end-to-end.
+- [→] E4. `report/report.typ` scenario section folded into Phase G (needs
+      the Phase F perf numbers anyway).
+- [x] **COMMIT**: "Update docs for Olympics scenario"
 
 ### Phase F — Part 4 performance (on Linux / matanco.space)
 - [ ] F1. `perf stat`/`perf record` over both architectures on the base
