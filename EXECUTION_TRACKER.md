@@ -153,19 +153,18 @@ commit boundary.
       the Phase F perf numbers anyway).
 - [x] **COMMIT**: "Update docs for Olympics scenario"
 
-### Phase F — Part 4 performance (on Linux / matanco.space)
-- [ ] F1. `perf stat`/`perf record` over both architectures on the base
-      workload (`profiling/run_perf_*.sh`); capture execution time, CPU
-      cycles, context switches, memory, syscalls.
-- [ ] F2. **State-growth scaling**: run the base workload at N =
-      100/500/1000/2000/5000 events; tabulate total + per-call time. Expect
-      FaaS to climb (reload-the-world per call), Traditional ~flat.
-- [ ] F3. Run both benchmarks on multicore Linux: seat-race
-      (consistency/correctness, before+after fix) and parallel-throughput
-      (FaaS speedup vs. cores). Record the numbers.
-- [ ] F4. Fill `report/report.typ` Part 4 tables + narrative explaining
-      *why* each result makes sense.
-- **COMMIT**: "Add Part 4 performance results to report"
+### Phase F — Part 4 performance (on Linux / matanco.space) — DONE
+- [x] F1. `perf stat` over both architectures (base 200-event workload).
+      FaaS ≈ 150× Traditional on wall-clock/cycles/instructions; 631×
+      context-switches, 123× page-faults. Raw in `results/*/perf_stat.txt`.
+- [x] F2. State-growth (`bench/state_growth.py`, N=100..2000): Traditional
+      flat (~0.15s); FaaS 8.7→212s, ratio 65×→1258× (≈O(N²) from reloading
+      the growing blob per call).
+- [x] F3. Parallel throughput on 8 cores: **FaaS 5.86×** (12.4s→2.1s).
+      Seat-race on Linux: both race (Trad 4 / FaaS 8 double-sold), both
+      fixes → 0.
+- [x] F4. All numbers captured in `report/results.md` (feeds the report).
+- [x] **COMMIT**: "Add Part 4 performance results (perf, state-growth, both benchmarks)"
 
 ### Phase G — Report writing (final pass, ≤6 pages)
 - [ ] G1. Parts 1 & 2 architecture descriptions.
