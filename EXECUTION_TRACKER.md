@@ -166,14 +166,16 @@ commit boundary.
 - [x] F4. All numbers captured in `report/results.md` (feeds the report).
 - [x] **COMMIT**: "Add Part 4 performance results (perf, state-growth, both benchmarks)"
 
-### Phase G — Report writing (final pass, ≤6 pages)
-- [ ] G1. Parts 1 & 2 architecture descriptions.
-- [ ] G2. Part 3 discussion (naive vs. idiomatic FaaS `go_live`; how many
-      parts change, how risky, which extends easier).
-- [ ] G3. The four-axis comparison as the analytical core; AI Tool Usage
-      Disclosure section.
-- [ ] G4. Fill `ids.typ` with real student IDs; compile both `.typ` → PDF
-      (Linux/`typst` if available).
+### Phase G — Report writing (final pass, ≤6 pages) — DONE (pending IDs)
+- [x] G1. Parts 1 & 2 architecture descriptions written.
+- [x] G2. Part 3 discussion (naive vs. idiomatic FaaS `go_live`; parts
+      changed / risk / extensibility verdict).
+- [x] G3. Four-axis comparison with the real Phase F numbers + AI
+      disclosure section.
+- [x] G4. Compiled `report.typ` → `report.pdf` (4 pages, under the 6 limit)
+      and `ids.typ` → `ids.pdf` via typst 0.15 on Linux; pulled to `report/`.
+- [ ] ⚠️ `ids.typ` still has placeholder student ID numbers — the team must
+      fill the two real IDs (the one thing I can't supply).
 - **COMMIT**: "Write HW2 report content"
 
 ## Operation catalog
