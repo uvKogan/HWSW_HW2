@@ -4,13 +4,14 @@
     "Matan Cohen",
     "Yuval Kogan"
   ],
-  "last_updated": "2026-07-09",
-  "scenario": null,
+  "last_updated": "2026-07-17",
+  "scenario": "Olympic Games Management System",
   "scenario_options": [
     "hospital",
     "hotel",
     "airport",
     "university_courses",
+    "olympics",
     "other"
   ],
   "parts": {
@@ -19,8 +20,8 @@
       "notes": "Generic placeholder operations, not scenario-specific yet"
     },
     "scenario_selection": {
-      "status": "not_started",
-      "notes": "Blocks renaming the 7 ops to real ones"
+      "status": "done",
+      "notes": "Olympic Games Management System: venues/matches/ticketing/volunteers/shuttles/restaurants/subscriptions/country scores, 9 base ops + go_live (Part 3)"
     },
     "part1_traditional": {
       "status": "not_started",
@@ -32,15 +33,15 @@
     },
     "part3_feature_extension": {
       "status": "not_started",
-      "notes": "Needs feature choice; C++ accelerator stub ready if the feature is compute-heavy"
+      "notes": "Feature chosen: go_live cross-cutting cascade (fan-out + live standings, pure Python). Plus project_medals parallel-throughput benchmark for the FaaS-win axis. C++ accelerator dropped."
     },
     "part4_performance": {
       "status": "not_started",
-      "notes": "Scripts ready (profiling/); untested on a machine with perf installed (this dev sandbox doesn't have it)"
+      "notes": "Design: perf on base workload + state-growth scaling + two concurrency benchmarks (seat-race, parallel-throughput). Runs on Linux/matanco.space (Windows dev box lacks perf)."
     },
     "part5_security_maintainability": {
       "status": "optional_not_started",
-      "notes": "Course amendment marked this + flamegraphs as removed; do if time allows"
+      "notes": "Team decided to skip (optional per course amendment); effort focused on Parts 1-4 instead"
     },
     "report": {
       "status": "not_started",

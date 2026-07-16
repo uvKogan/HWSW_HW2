@@ -10,22 +10,31 @@ Matan Cohen, Yuval Kogan.
 
 ## Scenario
 <!-- SCENARIO_START -->
-**Not yet chosen.** Options considered: hospital, hotel, airport, university_courses, other.
+**Olympic Games Management System**
 <!-- SCENARIO_END -->
 Generated from `STATUS.json`'s `scenario` field by `tools/sync_status.py` --
 set it with `python3 tools/sync_status.py set-scenario "..."`, don't hand-edit
 between the markers.
 
 ## Architecture decisions already made
-- **Both architectures in Python** (not mixed) so Part 4's performance
-  comparison isolates the execution model, not the language. An optional
-  shared C++ accelerator (`common/cpp/accelerator.cpp`) exists for whichever
-  Part 3 feature needs real compute, invoked identically by both sides.
-- **Shared core**: all 7 operations are pure `(state, params) -> result`
+- **Both architectures in pure Python** (no C++) so Part 4's comparison
+  isolates the execution model, not the language — and because Python CPU
+  work being GIL-serialized is exactly what makes the FaaS parallel win
+  visible (see thesis below). The old `common/cpp/` accelerator is removed.
+- **Shared core**: all operations are pure `(state, params) -> result`
   functions in `common/operations.py`. Traditional and FaaS both call the
   *same* functions — the only difference is how state is held (persistent
   in-memory object vs. load/save via sqlite per call) and how the call is
   dispatched (in-process vs. subprocess-per-call).
+- **Comparison thesis (the report's core)**: the two architectures' defining
+  traits flip the winner by workload. (1) Shared contended state →
+  *Traditional* wins (in-process lock vs. FaaS coordinating through external
+  state) — the seat-race demo. (2) Independent CPU-bound work in parallel →
+  *FaaS* wins (process-per-call multicore vs. one GIL-bound monolith
+  process) — the `project_medals` throughput benchmark. (3) Per-call latency
+  + state growth → *Traditional* (in-memory vs. reload-whole-blob-per-call).
+  (4) Atomic cross-cutting change → *Traditional* easier/safer (`go_live`
+  cascade). Full detail: `EXECUTION_TRACKER.md`.
 - **Traditional**: `Traditional/server.py`, one long-lived process, stdlib
   `http.server` (no framework), in-memory state.
 - **FaaS**: `FaaS/gateway.py` spawns a fresh `python3` subprocess per
@@ -58,23 +67,23 @@ hand-edited directly, so this table can't silently go stale either way.
 | Part | Status | Notes |
 |---|---|---|
 | Infra scaffold | Done | Generic placeholder operations, not scenario-specific yet |
-| Scenario selection | Not started | Blocks renaming the 7 ops to real ones |
+| Scenario selection | Done | Olympic Games Management System: venues/matches/ticketing/volunteers/shuttles/restaurants/subscriptions/country scores, 9 base ops + go_live (Part 3) |
 | Part 1 -- Traditional | Not started | Skeleton exists (Traditional/), needs real ops + a couple runs of the HTTP server mode to demo it's a "real" server |
 | Part 2 -- FaaS | Not started | Skeleton exists (FaaS/), needs real ops |
-| Part 3 -- Feature extension | Not started | Needs feature choice; C++ accelerator stub ready if the feature is compute-heavy |
-| Part 4 -- Performance | Not started | Scripts ready (profiling/); untested on a machine with perf installed (this dev sandbox doesn't have it) |
-| Part 5 -- Security/Maintainability | Optional, not started | Course amendment marked this + flamegraphs as removed; do if time allows |
+| Part 3 -- Feature extension | Not started | Feature chosen: go_live cross-cutting cascade (fan-out + live standings, pure Python). Plus project_medals parallel-throughput benchmark for the FaaS-win axis. C++ accelerator dropped. |
+| Part 4 -- Performance | Not started | Design: perf on base workload + state-growth scaling + two concurrency benchmarks (seat-race, parallel-throughput). Runs on Linux/matanco.space (Windows dev box lacks perf). |
+| Part 5 -- Security/Maintainability | Optional, not started | Team decided to skip (optional per course amendment); effort focused on Parts 1-4 instead |
 | Report | Not started | report/report.typ + report/ids.typ skeletons exist (Typst, not installed in this sandbox) |
 <!-- STATUS_TABLE_END -->
 
 ## Open decisions / TODO
-- Pick the scenario.
-- Rename the 7 placeholder operations in `common/operations.py` to match it
-  (keep the `(state, params) -> result` signature so nothing else changes).
-- Decide the Part 3 feature (own idea vs. AI-proposed — must disclose either
-  way per the assignment rules).
-- Get access to a machine with `perf` + `typst` installed for Part 4 and the
-  report compile step (neither is available in this dev sandbox).
+- Scenario chosen (Olympic Games Management System); 9-op catalog + Part 3
+  `go_live` + `project_medals` benchmark finalized in `EXECUTION_TRACKER.md`.
+- Implement Phases A–G per the tracker (A: reference data → G: report).
+- Set up the `matanco.space` Linux box for Part 4 (`perf`, multicore
+  parallel-throughput numbers, `typst` report compile). This dev machine is
+  Windows (`python`, no `perf`/`typst`); code + correctness runs happen here,
+  profiling happens on Linux.
 
 ## AI usage log
 Per the assignment's disclosure requirement ("you may use AI tools for
@@ -85,9 +94,13 @@ whenever AI meaningfully shapes a decision or writes code that ships.
 |---|---|---|
 | 2026-07-08 | Infra planning: how to structure Traditional vs FaaS so Part 4's comparison is fair | Adopted the shared-core (`common/operations.py`) design; full repo scaffold (`Traditional/`, `FaaS/`, `common/`, `profiling/`, `report/` skeletons, `script.sh`) written by AI, verified end-to-end by running it (correctness diff passed) |
 | 2026-07-08 | Meta-tooling: project-state tracking, prompt logging, permissions | Added `.claude/settings.json` permissions, `STATUS.json`/`PROJECT.md` sync tooling + hooks, `prompts.md` auto-logging via `UserPromptSubmit` hook + `log-prompt` skill for AI interactions outside this session |
+| 2026-07-16 | Scenario + operation design: map the scaffold onto an Olympics domain; choose a Part 3 feature; design a comparison that isn't one-sided | Selected the 9-op catalog (venues/ticketing/volunteers/shuttles/restaurants/pub-sub/scoring), the `go_live` cross-cutting cascade for Part 3, and — after team steering — a four-axis thesis where FaaS *wins* one axis: seat-race consistency (Traditional) vs. `project_medals` parallel throughput (FaaS). Dropped the C++ accelerator as pure Python better demonstrates the GIL-vs-multiprocess win. AI proposed options; team chose direction. |
+| 2026-07-16 | Infra bug: prompt-logging + status hooks silently failing | AI found the `UserPromptSubmit`/`PostToolUse`/`SessionStart` hooks were hardcoded to a teammate's absolute Linux path (`/home/yuvalk/...`), failing silently on the Windows machine; fixed to relative paths and backfilled the missed session prompts into `prompts.md`. |
 
 Raw prompt history (for this session) auto-logs to `prompts.md` via a hook --
-see that file for the verbatim record backing this summary table.
+see that file for the verbatim record backing this summary table. (The hook
+was broken for part of this project's life; see the backfill note in
+`prompts.md`.)
 
 ## Future: package this as a plugin
 Not doing this now (only a 2-person homework, not worth the packaging
