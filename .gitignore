@@ -15,4 +15,9 @@ common/workload_fixture.json
 # report build output (keep source, ignore compiled unless you want it tracked)
 report/*.pdf
 
+# real student IDs — injected at compile time, never committed
+report/ids.local
+
+# assembled submission
 HW2.zip
+submission/
