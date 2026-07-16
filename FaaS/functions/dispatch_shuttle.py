@@ -1,4 +1,4 @@
 from FaaS.functions._runtime import run
 
 if __name__ == "__main__":
-    run("handle_capacity_event")
+    run("dispatch_shuttle")

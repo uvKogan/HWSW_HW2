@@ -1,11 +1,16 @@
 """
 Deterministic workload generator shared by both architectures.
 
-Both Traditional/server.py and FaaS/gateway.py replay the exact same
-event sequence, so Part 4's performance comparison is driven by
-identical work, and the final states can be diffed for a correctness
-check (same inputs -> same observable outputs, regardless of
-execution architecture).
+Both Traditional/server.py and FaaS/gateway.py replay the exact same event
+sequence, so Part 4's performance comparison is driven by identical work,
+and the final states can be diffed for a correctness check (same inputs ->
+same observable outputs, regardless of execution architecture).
+
+IDs are drawn from `common.reference_data`'s fixed roster so a replayed
+workload looks like a real, bounded Games rather than unbounded synthetic
+IDs. The generator emits the 9 base ops plus the Part 3 `go_live` cascade.
+`project_medals` is deliberately excluded -- it is exercised only by the
+parallel-throughput benchmark, not the correctness/perf replay.
 """
 
 import json
@@ -13,41 +18,68 @@ import random
 import sys
 from pathlib import Path
 
-from common.operations import OPERATIONS
+from common import reference_data as ref
 
-N_RESOURCES = 10
-N_STAFF = 6
-N_ENTITIES = 20
-N_EQUIPMENT = 8
+# Small bounded pools so ops actually collide (venues get re-booked, seats
+# get re-sold, standings accumulate) rather than every event touching a fresh
+# unique ID.
+VENUE_IDS = [v["id"] for v in ref.VENUES]
+VOLUNTEER_IDS = [v["id"] for v in ref.VOLUNTEERS]
+ATHLETE_IDS = [a["id"] for a in ref.ATHLETES]
+COUNTRY_CODES = [c["code"] for c in ref.COUNTRIES]
+N_MATCHES = 12
+N_SEATS = 40
+N_SHUTTLES = 5
+N_STREAMS = 12
+N_USERS = 60  # subset of the 200-user pool actually active in a run
+
+OP_NAMES = [
+    "book_venue_slot", "release_venue_slot", "book_ticket", "assign_volunteer",
+    "dispatch_shuttle", "reserve_restaurant_table", "subscribe_to_updates",
+    "push_live_event", "update_country_score",
+    # "go_live" is added to the replay in Phase C (needs its FaaS stub first).
+]
+
+
+def _params_for(op: str, rng: random.Random) -> dict:
+    match = f"match{rng.randrange(N_MATCHES)}"
+    if op == "book_venue_slot":
+        return {"venue_id": rng.choice(VENUE_IDS), "match_id": match}
+    if op == "release_venue_slot":
+        return {"venue_id": rng.choice(VENUE_IDS)}
+    if op == "book_ticket":
+        return {"match_id": match, "seat_id": f"seat{rng.randrange(N_SEATS)}",
+                "user_id": f"user{rng.randrange(N_USERS):03d}"}
+    if op == "assign_volunteer":
+        return {"volunteer_id": rng.choice(VOLUNTEER_IDS), "venue": rng.choice(VENUE_IDS)}
+    if op == "dispatch_shuttle":
+        return {"shuttle_id": f"shuttle{rng.randrange(N_SHUTTLES)}",
+                "route": f"village->{rng.choice(VENUE_IDS)}",
+                "seats": rng.choice([4, 8, 12, 20])}
+    if op == "reserve_restaurant_table":
+        return {"athlete_id": rng.choice(ATHLETE_IDS),
+                "restaurant_id": rng.choice(["main_hall", "asia_kitchen", "grill"]),
+                "party_size": rng.randint(1, 6)}
+    if op == "subscribe_to_updates":
+        return {"subscriber_id": f"user{rng.randrange(N_USERS):03d}", "topic": match}
+    if op == "push_live_event":
+        return {"match_id": match, "event_type": rng.choice(["start", "score", "finish"]),
+                "details": "auto"}
+    if op == "update_country_score":
+        return {"country_code": rng.choice(COUNTRY_CODES),
+                "medal": rng.choice(["gold", "silver", "bronze"])}
+    if op == "go_live":
+        return {"match_id": match, "venue_id": rng.choice(VENUE_IDS),
+                "stream_id": f"stream{rng.randrange(N_STREAMS)}"}
+    raise ValueError(f"no param generator wired up for operation {op!r}")
 
 
 def generate_workload(seed: int = 42, n_events: int = 200) -> list[dict]:
     rng = random.Random(seed)
-    op_names = list(OPERATIONS.keys())
     events = []
-
     for _ in range(n_events):
-        op = rng.choice(op_names)
-
-        if op == "schedule_resource":
-            params = {"resource_id": f"res{rng.randrange(N_RESOURCES)}", "entity_id": f"ent{rng.randrange(N_ENTITIES)}"}
-        elif op == "release_resource":
-            params = {"resource_id": f"res{rng.randrange(N_RESOURCES)}"}
-        elif op == "assign_staff":
-            params = {"staff_id": f"staff{rng.randrange(N_STAFF)}", "unit": rng.choice(["A", "B", "C"])}
-        elif op == "update_shift":
-            params = {"staff_id": f"staff{rng.randrange(N_STAFF)}", "shift": rng.choice(["day", "night"])}
-        elif op == "handle_capacity_event":
-            params = {"delta": rng.choice([-5, -1, 1, 5])}
-        elif op == "track_entity_status":
-            params = {"entity_id": f"ent{rng.randrange(N_ENTITIES)}", "status": rng.choice(["pending", "active", "closed"])}
-        elif op == "allocate_equipment":
-            params = {"equipment_id": f"eq{rng.randrange(N_EQUIPMENT)}", "target": f"res{rng.randrange(N_RESOURCES)}"}
-        else:
-            raise ValueError(f"no param generator wired up for operation {op!r}")
-
-        events.append({"op": op, "params": params})
-
+        op = rng.choice(OP_NAMES)
+        events.append({"op": op, "params": _params_for(op, rng)})
     return events
 
 

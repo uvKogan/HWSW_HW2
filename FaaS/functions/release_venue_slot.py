@@ -1,4 +1,4 @@
 from FaaS.functions._runtime import run
 
 if __name__ == "__main__":
-    run("assign_staff")
+    run("release_venue_slot")

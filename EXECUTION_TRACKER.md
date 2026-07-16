@@ -71,33 +71,30 @@ would compute the same wrong answer. Therefore:
 Each phase ends where the correctness gate still prints `MATCH`; that's the
 commit boundary.
 
-### Phase A — Reference data (additive, nothing wired yet)
-- [ ] A1. Create `common/reference_data.py`: `COUNTRIES` (~10 NOCs),
-      `ATHLETES` (~30, each with country + sport), `VOLUNTEERS` (~15),
-      `VENUES` (real LA28 venues: SoFi Stadium, Crypto.com Arena, Rose
-      Bowl, BMO Stadium, Dodger Stadium, ...), `USERS` (~200 synthetic
-      spectator IDs). Static master data, **not** part of mutable `state`.
-- [ ] A2. Sanity-import (`python -c "import common.reference_data"`).
-- **COMMIT**: "Add Olympics reference data (countries/athletes/volunteers/venues/users)"
+### Phase A — Reference data (additive, nothing wired yet) — DONE
+- [x] A1. Create `common/reference_data.py`: `COUNTRIES` (10 NOCs),
+      `ATHLETES` (30, each with country + sport), `VOLUNTEERS` (15),
+      `VENUES` (12 real LA28 venues), `USERS` (200 synthetic spectator IDs),
+      plus derived O(1) ID lookup sets. Static master data, **not** part of
+      mutable `state`.
+- [x] A2. Sanity-import + self-check pass on both Windows (`python`) and
+      Linux/matanco.space (`python3`). Full placeholder pipeline still
+      prints `MATCH` on Linux (setup verified end-to-end).
+- [x] **COMMIT**: `3c30bf5` "Add Olympics reference data (...)"
 
-### Phase B — 9 base ops → Olympics domain (Parts 1 & 2 baseline)
-- [ ] B1. Rewrite `common/operations.py`: new `initial_state()` (buckets:
-      `venues`, `matches`, `volunteers`, `shuttles`, `restaurant_bookings`,
-      `subscriptions`, `country_scores`, `standings`, `streams`, `log`),
-      the 9 base ops (see catalog below), updated `OPERATIONS` registry.
-      Entity params validated against `reference_data` (unknown ID →
-      `{"ok": False, ...}`). Keep `_log`/`_now`; keep state JSON-clean.
-- [ ] B2. Rename/rewrite `FaaS/functions/*.py` stubs to match (one 4-line
-      `_runtime.run("...")` file per op).
-- [ ] B3. Rewrite `common/workload.py`'s if/elif generator + pool
-      constants to the 9 ops, drawing IDs from `reference_data` pools.
-- [ ] B4. Add a small `common/test_operations.py` (or inline asserts):
-      exercise each op's happy path + one rejection path (seat already
-      sold, unknown country, capacity ceiling). Pure functions → trivial.
-- [ ] B5. Run the pipeline (`python -m common.workload ...`, both
-      architectures, `python -m common.compare_states ...`); confirm
-      `MATCH`.
-- **COMMIT**: "Rename placeholder ops to Olympic Games domain (9 base ops + sanity tests)"
+### Phase B — 9 base ops → Olympics domain (Parts 1 & 2 baseline) — DONE
+- [x] B1. Rewrote `common/operations.py`: new `initial_state()` (10
+      buckets), 9 base ops + validation against `reference_data`, updated
+      `OPERATIONS`. (Also pre-added the Part-3 ops `allocate_stream`/
+      `recompute_standings`/`go_live` and the benchmark op `project_medals`
+      — wired into the workload in later phases.)
+- [x] B2. Renamed `FaaS/functions/*.py` stubs to the 9 base ops.
+- [x] B3. Rewrote `common/workload.py` (generator + pools from
+      `reference_data`); `go_live` held out until Phase C.
+- [x] B4. Added `common/test_operations.py` — 8 tests (happy + rejection
+      paths). The only real check of op *correctness* (MATCH can't do it).
+- [x] B5. `python -m common.test_operations` → 8 pass; pipeline → `MATCH`.
+- [x] **COMMIT**: "Rename placeholder ops to Olympic Games domain (9 base ops + sanity tests)"
 
 ### Phase C — Part 3 feature: `go_live` cascade (pure Python)
 - [ ] C1. Add `recompute_standings(state, params)` to
