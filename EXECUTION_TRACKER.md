@@ -113,40 +113,31 @@ commit boundary.
 - [x] **COMMIT**: "Add Part 3 go_live cascade (fan-out + live standings, pure Python)"
 
 ### Phase D — The two concurrency experiments
-**D-consistency (Traditional wins): seat-race**
-- [ ] D1. `bench/seat_race.py`: seed one match with a small seat pool
-      (`seat0..seat9`); draw N≈30 users deliberately targeting the *same*
-      seats. Fire N concurrent `book_ticket` calls via `ThreadPoolExecutor`
-      — against Traditional `--serve` (`/invoke` POSTs) and against
-      `FaaS.gateway.invoke()` (subprocess each). Read back
-      `matches[m]["seats"]`; report any seat sold to >1 user (last-writer
-      clobber) or lost.
-- [ ] D2. Run with no fix; capture ≥1 reproduced double-sold/lost seat on
-      the FaaS side.
-- [ ] D3. Traditional fix: a `threading.Lock` around `book_ticket`'s
-      critical section in `Traditional/services/__init__.py`'s dispatch.
-- [ ] D4. FaaS fix: this requires more than a one-liner — `_runtime.py`'s
-      `load_state()`/`save_state()` are **separate connections**, so a
-      transaction must span load→op→save. Add a `book_ticket`-path that
-      holds one sqlite connection with `BEGIN IMMEDIATE` across the whole
-      cycle (or a compare-and-swap in `save_state`). Note honestly in the
-      report: because state is one JSON blob in one row, this is a *global*
-      state lock, not per-seat — the coarse-external-state tax.
-- [ ] D5. Re-run; confirm zero double-sold seats both sides.
+**D-consistency (Traditional wins): seat-race** — DONE
+- [x] D1. `bench/seat_race.py` (+ `bench/_serverctl.py`): N users contend
+      for the same seats; double-sells detected from responses (count of
+      ok:True per seat), no state-read endpoint needed. Env-gated
+      `OLYMPICS_RACE_DELAY` widens the check-then-write window (default off,
+      so correctness/perf runs are untouched — MATCH still holds).
+- [x] D2. Local result (30 users, 10 seats, 0.02s window): Traditional
+      no-lock **3** double-sold, FaaS no-txn **5** double-sold. Both race;
+      FaaS harder.
+- [x] D3. Traditional fix: `OLYMPICS_TICKET_LOCK` → `threading.Lock` in
+      `Traditional/services/__init__.py` dispatch → 0 double-sold.
+- [x] D4. FaaS fix: `OLYMPICS_FAAS_TXN` → `transactional_apply` in
+      `FaaS/storage.py` holds one connection with `BEGIN IMMEDIATE` across
+      load→op→save (`_runtime.py` routes to it) → 0 double-sold. Honest
+      caveat in code: it's a *global* state-blob lock, not per-seat.
+- [x] D5. Both fixes → 0 double-sold (10 ok / 10 seats, correct).
 
-**D-throughput (FaaS wins): parallel independent CPU**
-- [ ] D6. Add `project_medals(state, params={country_code, iterations})`
-      to `common/operations.py`: CPU-heavy Monte Carlo medal projection,
-      reads only params + `reference_data`, **returns** a result, writes
-      **no** shared state (so concurrent calls don't contend — the clean
-      embarrassingly-parallel case). Register in `OPERATIONS`. Its FaaS
-      function is compute-only (bypasses load/save state I/O) so the
-      benchmark measures compute, not blob serialization.
-- [ ] D7. `bench/parallel_throughput.py`: fire M concurrent `project_medals`
-      calls (M ≈ cores × k) at both architectures via `ThreadPoolExecutor`;
-      measure wall-clock + speedup. Tune `iterations` so per-call compute
-      ≫ spawn cost. (Real numbers come from the Linux run in Phase F.)
-- **COMMIT**: "Add concurrency experiments: seat-race (Traditional) + parallel throughput (FaaS)"
+**D-throughput (FaaS wins): parallel independent CPU** — DONE
+- [x] D6. `project_medals` (compute-only, no shared-state writes) +
+      compute-only `FaaS/functions/project_medals.py` (bypasses state I/O).
+- [x] D7. `bench/parallel_throughput.py`: M concurrent calls at both
+      architectures. Local smoke test (8 tasks × 1M iters, 22 cores):
+      Traditional 1.07s vs FaaS 0.58s → **FaaS 1.84×**. Clean numbers from
+      Linux in Phase F.
+- [x] **COMMIT**: "Add concurrency experiments: seat-race (Traditional) + parallel throughput (FaaS)"
 
 ### Phase E — Docs
 - [x] E1. `STATUS.json`: scenario set to "Olympic Games Management

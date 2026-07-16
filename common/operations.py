@@ -26,11 +26,27 @@ Operation groups:
     the parallel-throughput benchmark (the FaaS-wins axis).
 """
 
+import os
+import time
 from datetime import datetime, timezone
 
 from common import reference_data as ref
 
 MEDAL_POINTS = {"gold": 3, "silver": 2, "bronze": 1}
+
+
+def _race_window() -> None:
+    """Demo-only hook: widen the check-then-commit window in book_ticket so
+    the seat-booking race is reproducible in bench/seat_race.py.
+
+    Default is a no-op (env unset → 0s), so normal correctness/perf runs are
+    completely unaffected. A real ticketing system has genuine latency here (a
+    DB round-trip between "is the seat free?" and "mark it sold"); this just
+    makes that inherent window observable on demand.
+    """
+    delay = float(os.environ.get("OLYMPICS_RACE_DELAY", "0") or 0)
+    if delay:
+        time.sleep(delay)
 
 
 def _now() -> str:
@@ -102,6 +118,7 @@ def book_ticket(state: dict, params: dict) -> dict:
         return _reject(state, "book_ticket", f"seat {seat_id} already sold",
                        match_id=match_id, seat_id=seat_id, user_id=user_id)
 
+    _race_window()  # no-op unless OLYMPICS_RACE_DELAY is set (seat-race demo)
     seats[seat_id] = user_id
     _log(state, "book_ticket", match_id=match_id, seat_id=seat_id, user_id=user_id)
     return {"ok": True, "message": f"seat {seat_id} sold to {user_id}"}
