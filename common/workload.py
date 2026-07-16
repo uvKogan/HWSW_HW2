@@ -36,8 +36,7 @@ N_USERS = 60  # subset of the 200-user pool actually active in a run
 OP_NAMES = [
     "book_venue_slot", "release_venue_slot", "book_ticket", "assign_volunteer",
     "dispatch_shuttle", "reserve_restaurant_table", "subscribe_to_updates",
-    "push_live_event", "update_country_score",
-    # "go_live" is added to the replay in Phase C (needs its FaaS stub first).
+    "push_live_event", "update_country_score", "go_live",
 ]
 
 

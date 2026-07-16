@@ -96,29 +96,21 @@ commit boundary.
 - [x] B5. `python -m common.test_operations` → 8 pass; pipeline → `MATCH`.
 - [x] **COMMIT**: "Rename placeholder ops to Olympic Games domain (9 base ops + sanity tests)"
 
-### Phase C — Part 3 feature: `go_live` cascade (pure Python)
-- [ ] C1. Add `recompute_standings(state, params)` to
-      `common/operations.py`: deterministic aggregation over
-      `country_scores` (+ athletes) → ranked leaderboard into
-      `state["standings"]`. Whole-state read → naturally exposes FaaS's
-      reload cost. Register in `OPERATIONS`.
-- [ ] C2. Add `go_live(state, params={match_id, venue_id, stream_id})`:
-      calls `push_live_event` (fan-out to subscribers) → allocates
-      `state["streams"][stream_id]` → calls `recompute_standings`. One
-      cross-cutting business transaction. Register in `OPERATIONS`.
-- [ ] C3. Add naive `FaaS/functions/go_live.py` stub (the "architectural
-      cheat": one fat function bundling 3 ops behind one load/save).
-- [ ] C4. Add idiomatic `FaaS/orchestrators/go_live_chain.py` — NOT in
-      `OPERATIONS`; calls `FaaS.gateway.invoke()` three times in sequence
-      (3 spawns, 3 load/save round trips, **no cross-call transaction** →
-      crash after step 2 leaves match live/streaming but standings stale;
-      a state Traditional's single call cannot reach). This diff *is* the
-      Part-3 payload.
-- [ ] C5. Fold `go_live` into `common/workload.py`'s generator (pure
-      Python now → no native build dep, safe in the main workload).
-- [ ] C6. Re-run the pipeline; confirm still `MATCH` (deterministic
-      standings ⇒ diff holds).
-- **COMMIT**: "Add Part 3 go_live cascade (fan-out + live standings, pure Python)"
+### Phase C — Part 3 feature: `go_live` cascade (pure Python) — DONE
+- [x] C1. `recompute_standings` — deterministic ranked leaderboard from
+      `country_scores` into `state["standings"]` (whole-state read).
+- [x] C2. `go_live(match_id, venue_id, stream_id)` — cascade:
+      `push_live_event` (fan-out) → `allocate_stream` → `recompute_standings`.
+      Decomposed into real registered ops so the FaaS orchestrator can chain
+      them.
+- [x] C3. Naive `FaaS/functions/go_live.py` stub (one fat function, one
+      load/save) + `allocate_stream.py` / `recompute_standings.py` stubs.
+- [x] C4. Idiomatic `FaaS/orchestrators/go_live_chain.py` — 3
+      `gateway.invoke()` calls, no cross-call transaction; documents the
+      partial-failure boundary. Verified it yields the correct state.
+- [x] C5. `go_live` folded into `common/workload.py`.
+- [x] C6. Pipeline → `MATCH` (deterministic standings hold).
+- [x] **COMMIT**: "Add Part 3 go_live cascade (fan-out + live standings, pure Python)"
 
 ### Phase D — The two concurrency experiments
 **D-consistency (Traditional wins): seat-race**
