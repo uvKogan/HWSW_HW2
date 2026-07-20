@@ -54,7 +54,12 @@ cp "${REPO}/report/results.md" "${OUT}/report/" # measured Part 4 numbers
 # ── 4. Strip build cruft that cp -r may have pulled in ───────────────────────
 find "${OUT}" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "${OUT}" -type f \( -name '*.pyc' -o -name '*.db' -o -name 'workload_fixture.json' \) -delete
-rm -rf "${OUT}/FaaS/functions/data"
+rm -rf "${OUT}/FaaS/functions/data" "${OUT}/FaaS/data"
+# The flamegraph helper clones the third-party FlameGraph repo alongside it;
+# that is external tooling (and huge), not our work -- keep our wrapper scripts
+# under profiling/ but drop the vendored clone and any captured perf data.
+rm -rf "${OUT}/profiling/flamegraph/FlameGraph"
+find "${OUT}/profiling" -type d -name results -prune -exec rm -rf {} + 2>/dev/null || true
 
 # ── 5. Zip ───────────────────────────────────────────────────────────────────
 ( cd "${OUT}" && zip -r -q "${ZIP}" . )
