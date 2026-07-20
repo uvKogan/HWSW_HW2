@@ -83,5 +83,17 @@ profiling/   perf wrappers for Part 4
 report/      Typst report + team IDs
 ```
 
+## Submission
+
+```bash
+./make_submission.sh   # rebuilds report.pdf + ids.pdf and assembles HW2.zip
+```
+
+Real student IDs are **not** in the repo: put them in the gitignored
+`report/ids.local` (`MATAN_ID=…`, `YUVAL_ID=…`) and they're injected into
+`ids.pdf` at compile time. Needs `typst` (`TYPST=~/bin/typst ./make_submission.sh`
+to point at a local binary) and `zip`. Measured Part 4 numbers are in
+`report/results.md`.
+
 See `PROJECT.md` for full status and design decisions, `EXECUTION_TRACKER.md`
 for the phase-by-phase build log, and `prompts.md` for the AI-usage record.

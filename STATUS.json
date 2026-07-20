@@ -4,7 +4,7 @@
     "Matan Cohen",
     "Yuval Kogan"
   ],
-  "last_updated": "2026-07-17",
+  "last_updated": "2026-07-20",
   "scenario": "Olympic Games Management System",
   "scenario_options": [
     "hospital",
@@ -24,33 +24,31 @@
       "notes": "Olympic Games Management System: venues/matches/ticketing/volunteers/shuttles/restaurants/subscriptions/country scores, 9 base ops + go_live (Part 3)"
     },
     "part1_traditional": {
-      "status": "not_started",
-      "notes": "Skeleton exists (Traditional/), needs real ops + a couple runs of the HTTP server mode to demo it's a \"real\" server"
+      "status": "done",
+      "notes": "Real ops wired; ThreadingHTTPServer /invoke mode + threading.Lock seat fix (OLYMPICS_TICKET_LOCK). Verified via correctness gate (MATCH) + seat-race benchmark."
     },
     "part2_faas": {
-      "status": "not_started",
-      "notes": "Skeleton exists (FaaS/), needs real ops"
+      "status": "done",
+      "notes": "9 base + Part 3 functions as subprocess-per-call stubs; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) for the seat fix; go_live_chain orchestrator. Verified MATCH vs Traditional."
     },
     "part3_feature_extension": {
-      "status": "not_started",
-      "notes": "Feature chosen: go_live cross-cutting cascade (fan-out + live standings, pure Python). Plus project_medals parallel-throughput benchmark for the FaaS-win axis. C++ accelerator dropped."
+      "status": "done",
+      "notes": "go_live cross-cutting cascade (push_live_event fan-out -> allocate_stream -> recompute_standings), pure Python. Naive single-function vs idiomatic 3-invoke orchestrator both shipped. project_medals parallel-throughput op for the FaaS-win axis."
     },
     "part4_performance": {
-      "status": "not_started",
-      "notes": "Design: perf on base workload + state-growth scaling + two concurrency benchmarks (seat-race, parallel-throughput). Runs on Linux/matanco.space (Windows dev box lacks perf)."
+      "status": "done",
+      "notes": "Measured on matanco.space (Linux, multicore): perf stat both architectures, state-growth scaling, seat-race (before/after fix), parallel-throughput (FaaS speedup). Numbers in report/results.md, tables in report."
     },
     "part5_security_maintainability": {
       "status": "optional_not_started",
       "notes": "Team decided to skip (optional per course amendment); effort focused on Parts 1-4 instead"
     },
     "report": {
-      "status": "not_started",
-      "notes": "report/report.typ + report/ids.typ skeletons exist (Typst, not installed in this sandbox)"
+      "status": "done",
+      "notes": "report/report.typ written (4 pages, all Parts + AI disclosure), compiles to PDF via typst. ids.typ takes compile-time ID injection from gitignored report/ids.local. make_submission.sh assembles HW2.zip."
     }
   },
   "blockers": [
-    "perf not installed in dev sandbox (needed for part4_performance)",
-    "typst not installed in dev sandbox (needed for report compile)",
-    "scenario not chosen (blocks renaming common/operations.py's 7 placeholder ops)"
+    "None. Parts 1-4 + report complete; perf/typst runs done on matanco.space (Linux). Remaining manual step: fill real student IDs in report/ids.local, then rerun make_submission.sh."
   ]
 }

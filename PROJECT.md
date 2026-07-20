@@ -68,22 +68,26 @@ hand-edited directly, so this table can't silently go stale either way.
 |---|---|---|
 | Infra scaffold | Done | Generic placeholder operations, not scenario-specific yet |
 | Scenario selection | Done | Olympic Games Management System: venues/matches/ticketing/volunteers/shuttles/restaurants/subscriptions/country scores, 9 base ops + go_live (Part 3) |
-| Part 1 -- Traditional | Not started | Skeleton exists (Traditional/), needs real ops + a couple runs of the HTTP server mode to demo it's a "real" server |
-| Part 2 -- FaaS | Not started | Skeleton exists (FaaS/), needs real ops |
-| Part 3 -- Feature extension | Not started | Feature chosen: go_live cross-cutting cascade (fan-out + live standings, pure Python). Plus project_medals parallel-throughput benchmark for the FaaS-win axis. C++ accelerator dropped. |
-| Part 4 -- Performance | Not started | Design: perf on base workload + state-growth scaling + two concurrency benchmarks (seat-race, parallel-throughput). Runs on Linux/matanco.space (Windows dev box lacks perf). |
+| Part 1 -- Traditional | Done | Real ops wired; ThreadingHTTPServer /invoke mode + threading.Lock seat fix (OLYMPICS_TICKET_LOCK). Verified via correctness gate (MATCH) + seat-race benchmark. |
+| Part 2 -- FaaS | Done | 9 base + Part 3 functions as subprocess-per-call stubs; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) for the seat fix; go_live_chain orchestrator. Verified MATCH vs Traditional. |
+| Part 3 -- Feature extension | Done | go_live cross-cutting cascade (push_live_event fan-out -> allocate_stream -> recompute_standings), pure Python. Naive single-function vs idiomatic 3-invoke orchestrator both shipped. project_medals parallel-throughput op for the FaaS-win axis. |
+| Part 4 -- Performance | Done | Measured on matanco.space (Linux, multicore): perf stat both architectures, state-growth scaling, seat-race (before/after fix), parallel-throughput (FaaS speedup). Numbers in report/results.md, tables in report. |
 | Part 5 -- Security/Maintainability | Optional, not started | Team decided to skip (optional per course amendment); effort focused on Parts 1-4 instead |
-| Report | Not started | report/report.typ + report/ids.typ skeletons exist (Typst, not installed in this sandbox) |
+| Report | Done | report/report.typ written (4 pages, all Parts + AI disclosure), compiles to PDF via typst. ids.typ takes compile-time ID injection from gitignored report/ids.local. make_submission.sh assembles HW2.zip. |
 <!-- STATUS_TABLE_END -->
 
 ## Open decisions / TODO
-- Scenario chosen (Olympic Games Management System); 9-op catalog + Part 3
-  `go_live` + `project_medals` benchmark finalized in `EXECUTION_TRACKER.md`.
-- Implement Phases A–G per the tracker (A: reference data → G: report).
-- Set up the `matanco.space` Linux box for Part 4 (`perf`, multicore
-  parallel-throughput numbers, `typst` report compile). This dev machine is
-  Windows (`python`, no `perf`/`typst`); code + correctness runs happen here,
-  profiling happens on Linux.
+Parts 1–4 + the report are **done and committed** (Phases A–H in
+`EXECUTION_TRACKER.md`; Part 5 skipped per the course amendment). The base
+pipeline prints `MATCH`, op unit tests pass, and both benchmarks ran on the
+`matanco.space` Linux box (perf, state-growth, seat-race, parallel
+throughput — numbers in `report/results.md`, tables in the report).
+
+The **only remaining manual step**: fill the two real student IDs in the
+gitignored `report/ids.local`, then rerun `make_submission.sh` to regenerate
+the PDFs (IDs injected at compile time) and rebuild `HW2.zip`. This dev
+machine is Windows (`python`, no `perf`/`typst`); the submission build runs
+on Linux (`ssh matanco 'cd ~/projects/HWSW_HW2 && TYPST=~/bin/typst ./make_submission.sh'`).
 
 ## AI usage log
 Per the assignment's disclosure requirement ("you may use AI tools for
@@ -96,6 +100,10 @@ whenever AI meaningfully shapes a decision or writes code that ships.
 | 2026-07-08 | Meta-tooling: project-state tracking, prompt logging, permissions | Added `.claude/settings.json` permissions, `STATUS.json`/`PROJECT.md` sync tooling + hooks, `prompts.md` auto-logging via `UserPromptSubmit` hook + `log-prompt` skill for AI interactions outside this session |
 | 2026-07-16 | Scenario + operation design: map the scaffold onto an Olympics domain; choose a Part 3 feature; design a comparison that isn't one-sided | Selected the 9-op catalog (venues/ticketing/volunteers/shuttles/restaurants/pub-sub/scoring), the `go_live` cross-cutting cascade for Part 3, and — after team steering — a four-axis thesis where FaaS *wins* one axis: seat-race consistency (Traditional) vs. `project_medals` parallel throughput (FaaS). Dropped the C++ accelerator as pure Python better demonstrates the GIL-vs-multiprocess win. AI proposed options; team chose direction. |
 | 2026-07-16 | Infra bug: prompt-logging + status hooks silently failing | AI found the `UserPromptSubmit`/`PostToolUse`/`SessionStart` hooks were hardcoded to a teammate's absolute Linux path (`/home/yuvalk/...`), failing silently on the Windows machine; fixed to relative paths and backfilled the missed session prompts into `prompts.md`. |
+| 2026-07-17 | Implementation (Phases A–F): write the Olympics domain, the two concurrency experiments, and gather Part 4 numbers | AI wrote `common/reference_data.py`, rewrote `common/operations.py` (9 base ops + `go_live` + `recompute_standings` + `project_medals`), the FaaS function stubs + `transactional_apply` seat fix + `go_live_chain` orchestrator, the Traditional `threading.Lock` fix, `common/workload.py`, `common/test_operations.py`, and `bench/{seat_race,parallel_throughput,state_growth,_serverctl}.py`. Ran the pipeline (`MATCH`) + unit tests locally; ran perf + both benchmarks on the `matanco.space` Linux box; captured results in `report/results.md`. Team reviewed. |
+| 2026-07-17 | Report writing (Phase G) | AI drafted `report/report.typ` (4 pages: Parts 1–4 + the four-axis comparison + AI-usage disclosure) from the measured numbers, compiled to PDF via typst on Linux. Team to review content and supply real IDs. |
+| 2026-07-20 | Submission packaging (Phase H) | Adopted HW1's compile-time ID-injection pattern: `report/ids.typ` reads IDs from `sys.inputs`, real numbers kept only in gitignored `report/ids.local`; `make_submission.sh` rebuilds both PDFs and assembles `HW2.zip` (required + supporting files, cruft stripped). Verified on Linux. |
+| 2026-07-20 | Doc hygiene: sync `STATUS.json`/`PROJECT.md`/tracker to the completed state | AI flipped Parts 1–4 + report to `done` via `tools/sync_status.py`, cleared stale blockers, refreshed the Open-decisions section and this log, and reconciled the `EXECUTION_TRACKER.md` ID-warning with the new `ids.local` mechanism. |
 
 Raw prompt history (for this session) auto-logs to `prompts.md` via a hook --
 see that file for the verbatim record backing this summary table. (The hook

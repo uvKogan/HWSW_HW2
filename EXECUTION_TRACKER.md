@@ -174,9 +174,18 @@ commit boundary.
       disclosure section.
 - [x] G4. Compiled `report.typ` → `report.pdf` (4 pages, under the 6 limit)
       and `ids.typ` → `ids.pdf` via typst 0.15 on Linux; pulled to `report/`.
-- [ ] ⚠️ `ids.typ` still has placeholder student ID numbers — the team must
-      fill the two real IDs (the one thing I can't supply).
+- [ ] ⚠️ Real student IDs still pending — fill `MATAN_ID`/`YUVAL_ID` in the
+      gitignored `report/ids.local`, then rerun `make_submission.sh` (injects
+      them into `ids.pdf` at compile time). The one thing I can't supply.
 - **COMMIT**: "Write HW2 report content"
+
+### Phase H — Submission packaging (HW1 pattern) — DONE
+- [x] H1. `report/ids.typ` reads IDs from `sys.inputs` (default `<ID>`);
+      real numbers live only in gitignored `report/ids.local`.
+- [x] H2. `make_submission.sh` rebuilds both PDFs with ID injection and
+      assembles `HW2.zip` (required + supporting files, cruft stripped).
+      Verified on matanco.space: 55 files, ~104K, distinct PDF per ID.
+- [x] **COMMIT**: `0061495` "Add make_submission.sh + compile-time ID injection (HW1 pattern)"
 
 ## Operation catalog
 
