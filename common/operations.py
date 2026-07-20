@@ -305,6 +305,26 @@ def project_medals(state: dict, params: dict) -> dict:
     return {"ok": True, "country": country, "iterations": iterations, "projected_gold": gold}
 
 
+# --- Fault-isolation benchmark op ------------------------------------------
+
+
+def render_highlight(state: dict, params: dict) -> dict:
+    """Render a match highlight reel.
+
+    Media rendering is heavy native work (a video encoder), and on a corrupt
+    input that encoder can crash the *whole process* -- a segfault/OOM, not a
+    Python exception you can catch. We model that worst case with `os.abort()`
+    (SIGABRT) when `params["corrupt"]` is set. Used by bench/fault_isolation.py
+    to contrast the two execution models: in the monolith this one call takes
+    down the shared process and every byte of in-memory state with it; in FaaS
+    it kills only the one subprocess, and externally-persisted state survives.
+    """
+    match_id = params.get("match_id", "?")
+    if params.get("corrupt"):
+        os.abort()  # native-level crash: no unwinding, no cleanup, process gone
+    return {"ok": True, "message": f"highlight reel rendered for {match_id}"}
+
+
 # Registry used by both architectures' dispatch layers.
 OPERATIONS = {
     # base (in the deterministic workload)
@@ -323,6 +343,8 @@ OPERATIONS = {
     "go_live": go_live,
     # parallel-throughput benchmark (not in the workload)
     "project_medals": project_medals,
+    # fault-isolation benchmark (not in the workload)
+    "render_highlight": render_highlight,
 }
 
 
