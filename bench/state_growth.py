@@ -26,7 +26,7 @@ def _time(cmd) -> float:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--sizes", type=int, nargs="+", default=[100, 500, 1000, 2000])
+    ap.add_argument("--sizes", type=int, nargs="+", default=[500, 1000, 2000, 5000])
     args = ap.parse_args()
 
     print(f"{'events':>7} {'Traditional(s)':>15} {'FaaS(s)':>10} {'ratio':>8} "

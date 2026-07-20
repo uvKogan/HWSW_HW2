@@ -27,11 +27,15 @@ VENUE_IDS = [v["id"] for v in ref.VENUES]
 VOLUNTEER_IDS = [v["id"] for v in ref.VOLUNTEERS]
 ATHLETE_IDS = [a["id"] for a in ref.ATHLETES]
 COUNTRY_CODES = [c["code"] for c in ref.COUNTRIES]
-N_MATCHES = 12
-N_SEATS = 40
-N_SHUTTLES = 5
-N_STREAMS = 12
-N_USERS = 60  # subset of the 200-user pool actually active in a run
+# Pools sized so a multi-thousand-event replay builds up a substantial state
+# blob (many matches, each with many sold seats, plus subscriptions and
+# bookings) -- that growing state is what makes the FaaS reload-per-call cost
+# visible in bench/state_growth.py. Bounded enough that ops still collide.
+N_MATCHES = 40
+N_SEATS = 200
+N_SHUTTLES = 20
+N_STREAMS = 40
+N_USERS = 200  # the full spectator pool is active in a run
 
 OP_NAMES = [
     "book_venue_slot", "release_venue_slot", "book_ticket", "assign_volunteer",
@@ -73,7 +77,7 @@ def _params_for(op: str, rng: random.Random) -> dict:
     raise ValueError(f"no param generator wired up for operation {op!r}")
 
 
-def generate_workload(seed: int = 42, n_events: int = 200) -> list[dict]:
+def generate_workload(seed: int = 42, n_events: int = 2000) -> list[dict]:
     rng = random.Random(seed)
     events = []
     for _ in range(n_events):
@@ -84,7 +88,7 @@ def generate_workload(seed: int = 42, n_events: int = 200) -> list[dict]:
 
 def main() -> None:
     seed = int(sys.argv[1]) if len(sys.argv) > 1 else 42
-    n_events = int(sys.argv[2]) if len(sys.argv) > 2 else 200
+    n_events = int(sys.argv[2]) if len(sys.argv) > 2 else 2000
     out_path = Path(sys.argv[3]) if len(sys.argv) > 3 else Path("common/workload_fixture.json")
 
     events = generate_workload(seed=seed, n_events=n_events)

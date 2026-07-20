@@ -57,8 +57,8 @@ def run_faas(tasks) -> float:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--tasks", type=int, default=16)
-    ap.add_argument("--iterations", type=int, default=3_000_000)
+    ap.add_argument("--tasks", type=int, default=32)
+    ap.add_argument("--iterations", type=int, default=5_000_000)
     args = ap.parse_args()
 
     tasks = _tasks(args.tasks, args.iterations)
