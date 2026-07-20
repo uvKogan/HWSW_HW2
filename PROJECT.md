@@ -17,40 +17,49 @@ set it with `python3 tools/sync_status.py set-scenario "..."`, don't hand-edit
 between the markers.
 
 ## Architecture decisions already made
-- **Both architectures in pure Python** (no C++) so Part 4's comparison
-  isolates the execution model, not the language — and because Python CPU
-  work being GIL-serialized is exactly what makes the FaaS parallel win
-  visible (see thesis below). The old `common/cpp/` accelerator is removed.
-- **Shared core**: all operations are pure `(state, params) -> result`
-  functions in `common/operations.py`. Traditional and FaaS both call the
-  *same* functions — the only difference is how state is held (persistent
-  in-memory object vs. load/save via sqlite per call) and how the call is
-  dispatched (in-process vs. subprocess-per-call).
-- **Comparison thesis (the report's core)**: the two architectures' defining
-  traits flip the winner by workload. (1) Shared contended state →
-  *Traditional* wins (in-process lock vs. FaaS coordinating through external
-  state) — the seat-race demo. (2) Independent CPU-bound work in parallel →
-  *FaaS* wins (process-per-call multicore vs. one GIL-bound monolith
-  process) — the `project_medals` throughput benchmark. (3) Per-call latency
-  + state growth → *Traditional* (in-memory vs. reload-whole-blob-per-call).
-  (4) Atomic cross-cutting change → *Traditional* easier/safer (`go_live`
-  cascade). Full detail: `EXECUTION_TRACKER.md`.
-- **Traditional**: `Traditional/server.py`, one long-lived process, stdlib
-  `http.server` (no framework), in-memory state.
-- **FaaS**: `FaaS/gateway.py` spawns a fresh `python3` subprocess per
-  operation call (`FaaS/functions/*.py`), state persisted externally via
-  `FaaS/storage.py` (sqlite).
-- **Correctness gate**: `common/workload.py` generates one deterministic
-  event sequence replayed through both systems; `common/compare_states.py`
-  diffs the final states (ignoring volatile timestamp fields). Verified
-  working end to end with generic placeholder operations.
-- **Profiling**: `perf stat`/`perf record` wrapping `script.sh`'s two run
-  modes; perf follows forked children by default so the FaaS side's many
-  subprocesses are captured in one invocation. Flamegraphs are optional per
-  the course's amendment to the guide, kept as nice-to-have tooling
-  (`profiling/flamegraph/`, `profiling/make_flamegraph.sh`).
-- Full rationale/tradeoffs for all of the above: see conversation history or
-  ask the assisting AI to re-derive from this doc + the code.
+- **Both architectures in pure Python** (no C++). Python CPU work being
+  GIL-serialized is exactly what makes the FaaS parallel win visible.
+- **Thesis: architecture as a forcing function.** We deliberately build each
+  side the way it is realistically built. *Traditional = a naive monolith*
+  (`Traditional/server.py`, one file: global mutable state, one giant
+  `handle()` with inlined/duplicated logic, no persistence) — the path of
+  least resistance when nothing forces structure. *FaaS = decoupled* (one
+  small function per file over a pure-function core in
+  `common/operations.py`) — the structure the platform's one-function-per-file
+  boundary guides you into. The report argues FaaS's constraints *force*
+  better structure and prevent whole bug classes by construction.
+- **NOT a shared core anymore.** The two are now *independent
+  implementations*: the monolith has its own business logic, the FaaS side
+  uses `common/operations.py`. (Earlier the design was symmetric — both
+  called identical code — and the report was a scrupulously balanced 4-axis
+  comparison; the team pivoted to a FaaS-favored story. See the reimpl plan.)
+- **Comparison (balanced but FaaS-favored), six axes.** (a) Per-call overhead
+  → *Traditional* (in-memory vs. fresh interpreter + sqlite round-trip).
+  (b) State growth → *Traditional* (O(1) in-memory vs. reload-whole-blob,
+  ~O(N²)). (c) Parallel independent CPU → *FaaS* (~13.5× on 8 cores;
+  process-per-call vs. one GIL-bound process). (d) Fault isolation → *FaaS*
+  (one `os.abort()` poison call kills the whole monolith + all in-memory
+  state; FaaS loses one subprocess, external state survives). (e) Idle
+  footprint → *FaaS* (monolith holds ~20 MB resident 24/7; FaaS scales to
+  zero). (f) Cross-request state leak → *FaaS by construction* (the monolith's
+  shared `_CTX` global mis-attributes ~34/40 concurrent bookings; FaaS has no
+  shared request context, so 0). Plus Part 3 ease-of-change: cross-cutting
+  atomic change favors Traditional, independent new capability favors FaaS.
+- **Traditional**: `Traditional/server.py` — one long-lived process, stdlib
+  `http.server`, all state in module globals, no persistence.
+- **FaaS**: `FaaS/gateway.py` spawns a fresh `python3` subprocess per call
+  (`FaaS/functions/*.py`), state persisted externally via `FaaS/storage.py`
+  (sqlite).
+- **Correctness: independent validation** (not a byte-identical gate). Each
+  side has its own unit tests — `common/test_operations.py` (FaaS core) and
+  `Traditional/test_monolith.py` (monolith). `common/compare_states.py` is
+  kept only as an informational check (the two still happen to agree on the
+  sequential replay; the monolith's bugs are concurrency/crash-only).
+- **Benchmarks** (`bench/`): `seat_race`, `context_leak`, `fault_isolation`,
+  `idle_footprint`, `parallel_throughput`, `state_growth`.
+- **Profiling**: `perf stat`/`perf record` wrapping `script.sh`'s run modes;
+  perf follows forked children so the FaaS subprocesses are captured in one
+  invocation. Flamegraphs optional per the course amendment.
 
 ## Status
 `STATUS.json` is the source of truth. The table below is generated from it by
@@ -68,20 +77,23 @@ hand-edited directly, so this table can't silently go stale either way.
 |---|---|---|
 | Infra scaffold | Done | Generic placeholder operations, not scenario-specific yet |
 | Scenario selection | Done | Olympic Games Management System: venues/matches/ticketing/volunteers/shuttles/restaurants/subscriptions/country scores, 9 base ops + go_live (Part 3) |
-| Part 1 -- Traditional | Done | Real ops wired; ThreadingHTTPServer /invoke mode + threading.Lock seat fix (OLYMPICS_TICKET_LOCK). Verified via correctness gate (MATCH) + seat-race benchmark. |
-| Part 2 -- FaaS | Done | 9 base + Part 3 functions as subprocess-per-call stubs; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) for the seat fix; go_live_chain orchestrator. Verified MATCH vs Traditional. |
-| Part 3 -- Feature extension | Done | go_live cross-cutting cascade (push_live_event fan-out -> allocate_stream -> recompute_standings), pure Python. Naive single-function vs idiomatic 3-invoke orchestrator both shipped. project_medals parallel-throughput op for the FaaS-win axis. |
-| Part 4 -- Performance | Done | Measured on matanco.space (Linux, multicore): perf stat both architectures, state-growth scaling, seat-race (before/after fix), parallel-throughput (FaaS speedup). Numbers in report/results.md, tables in report. |
+| Part 1 -- Traditional | Done | Naive monolith (Traditional/server.py, one file): module-global mutable state, one giant handle(), inlined/duplicated validation, no persistence, documented _CTX cross-request leak bug, env-gated coarse lock. Own tests: Traditional/test_monolith.py. |
+| Part 2 -- FaaS | Done | Clean decoupled FaaS: one function per file (FaaS/functions/) over the pure-function core common/operations.py; subprocess-per-call gateway; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) seat fix; go_live_chain orchestrator; render_highlight fault-demo function. Own tests: common/test_operations.py. |
+| Part 3 -- Feature extension | Done | go_live cross-cutting cascade + ease-of-change analysis: cross-cutting atomic change favors Traditional (one atomic call), adding an independent op favors FaaS (one new file vs editing the shared monolith). render_highlight poison op added for the fault demo. |
+| Part 4 -- Performance | Done | Six axes on 8-core Linux (Python 3.12, perf 6.8): per-call overhead + state-growth O(N^2) (Traditional wins); parallel throughput ~13.5x, fault isolation, idle footprint 20MB->0, cross-request leak 34/40->0 (FaaS wins). Numbers in report/results.md. |
 | Part 5 -- Security/Maintainability | Optional, not started | Team decided to skip (optional per course amendment); effort focused on Parts 1-4 instead |
 | Report | Done | report/report.typ written (4 pages, all Parts + AI disclosure), compiles to PDF via typst. ids.typ takes compile-time ID injection from gitignored report/ids.local. make_submission.sh assembles HW2.zip. |
 <!-- STATUS_TABLE_END -->
 
 ## Open decisions / TODO
-Parts 1–4 + the report are **done and committed** (Phases A–H in
-`EXECUTION_TRACKER.md`; Part 5 skipped per the course amendment). The base
-pipeline prints `MATCH`, op unit tests pass, and both benchmarks ran on the
-`matanco.space` Linux box (perf, state-growth, seat-race, parallel
-throughput — numbers in `report/results.md`, tables in the report).
+Parts 1–4 + the report are **done and committed** (Part 5 skipped per the
+course amendment). After the initial balanced build, the team pivoted to the
+**naive-monolith-vs-decoupled-FaaS, FaaS-favored** design (see the reimpl
+plan): Traditional was rewritten as a one-file naive monolith, correctness
+relaxed to independent unit tests per side, the workload scaled up, and three
+new FaaS-winning benchmarks added (fault isolation, cross-request leak, idle
+footprint). All six axes were re-measured on the `matanco.space` 8-core Linux
+box — numbers in `report/results.md`, tables in the report.
 
 The **only remaining manual step**: fill the two real student IDs in the
 gitignored `report/ids.local`, then rerun `make_submission.sh` to regenerate
@@ -104,6 +116,7 @@ whenever AI meaningfully shapes a decision or writes code that ships.
 | 2026-07-17 | Report writing (Phase G) | AI drafted `report/report.typ` (4 pages: Parts 1–4 + the four-axis comparison + AI-usage disclosure) from the measured numbers, compiled to PDF via typst on Linux. Team to review content and supply real IDs. |
 | 2026-07-20 | Submission packaging (Phase H) | Adopted HW1's compile-time ID-injection pattern: `report/ids.typ` reads IDs from `sys.inputs`, real numbers kept only in gitignored `report/ids.local`; `make_submission.sh` rebuilds both PDFs and assembles `HW2.zip` (required + supporting files, cruft stripped). Verified on Linux. |
 | 2026-07-20 | Doc hygiene: sync `STATUS.json`/`PROJECT.md`/tracker to the completed state | AI flipped Parts 1–4 + report to `done` via `tools/sync_status.py`, cleared stale blockers, refreshed the Open-decisions section and this log, and reconciled the `EXECUTION_TRACKER.md` ID-warning with the new `ids.local` mechanism. |
+| 2026-07-21 | Pivot: reimplement for a FaaS-favored "architecture as a forcing function" thesis | After team direction (make Traditional a realistic *naive monolith*, find decisive FaaS wins, scale the workload), AI planned and implemented it: rewrote `Traditional/server.py` as a one-file naive monolith (global state, no persistence, a documented `_CTX` cross-request-leak bug); relaxed correctness to independent per-side unit tests (`Traditional/test_monolith.py`); added the `render_highlight` poison op and three benchmarks (`fault_isolation`, `context_leak`, `idle_footprint`); scaled the workload/pools; re-measured all six axes on the 8-core Linux box; and rewrote the report. AI offered options at each fork; the team chose the FaaS-favored tilt, kept the comparison honest (Traditional keeps per-call/state-growth/atomicity wins), and ran/verified every number on our own hardware. |
 
 Raw prompt history (for this session) auto-logs to `prompts.md` via a hook --
 see that file for the verbatim record backing this summary table. (The hook

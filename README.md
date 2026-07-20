@@ -1,17 +1,22 @@
 # HW2 — Olympic Games Management System: Traditional vs FaaS
 
-A single Olympic Games operations system implemented **twice** — as a
-traditional monolith and as a Function-as-a-Service design — so the two
-architectures can be compared on performance, extensibility, and concurrency
-behaviour. Both implementations call the *same* business logic
-(`common/operations.py`); only the execution model differs.
+A single Olympic Games operations system implemented **twice** — so the two
+architectures can be compared on performance, resilience, extensibility, and
+correctness under concurrency. The thesis is *architecture as a forcing
+function*: each side is built the way it is realistically built, and FaaS's
+constraints force better structure and rule out whole bug classes.
 
-- **Traditional** (`Traditional/`): one long-lived process, all state in
-  memory, a stdlib `http.server` (no framework). Dispatch is a direct
-  in-process function call.
-- **FaaS** (`FaaS/`): each operation call is a fresh `python3` subprocess
-  (`FaaS/functions/*.py`), with state persisted externally in sqlite
-  (`FaaS/storage.py`). Stateless, isolated, minimal inter-function coupling.
+- **Traditional** (`Traditional/server.py`): a **naive monolith** — the entire
+  system in one file, all state in module-level globals (no persistence), every
+  operation inlined into one `handle()` dispatcher, on a stdlib `http.server`.
+  Fast and simple, but a single point of failure with shared-memory hazards.
+- **FaaS** (`FaaS/`): **decoupled** — one small function per file
+  (`FaaS/functions/*.py`) over a pure-function core (`common/operations.py`),
+  each call a fresh `python3` subprocess with state persisted externally in
+  sqlite (`FaaS/storage.py`). Stateless, isolated, independently scalable.
+
+The two are **independent implementations** (not shared code), each validated
+by its own unit tests (`common/test_operations.py`, `Traditional/test_monolith.py`).
 
 ## The 9 operations (Parts 1 & 2)
 
@@ -32,14 +37,19 @@ single-function port and an idiomatic three-call orchestrator
 
 ## The comparison (Part 4)
 
-The two architectures' defining traits flip the winner by workload:
+Balanced but FaaS-favored — six axes, measured on an 8-core Linux host:
 
-| Workload | Winner | Why |
+| Axis | Winner | Why |
 |---|---|---|
-| Contended shared state (seat-race) | Traditional | one in-process lock vs. coordinating through external state |
-| Independent parallel CPU (`project_medals`) | FaaS | process-per-call multicore vs. one GIL-bound monolith |
-| Per-call latency + state growth | Traditional | in-memory vs. reload-the-whole-blob per call |
-| Atomic cross-cutting change (`go_live`) | Traditional | one atomic call vs. chaining isolated functions |
+| Per-call overhead | Traditional | in-memory call vs. fresh interpreter + sqlite round-trip |
+| Latency under state growth | Traditional | O(1) in-memory vs. reload-the-whole-blob per call (~O(N²)) |
+| Parallel independent CPU (`project_medals`) | **FaaS** | process-per-call multicore (~13.5×) vs. one GIL-bound monolith |
+| Fault isolation (`render_highlight` crash) | **FaaS** | one poison call kills the whole monolith + all state; FaaS loses one subprocess |
+| Idle footprint | **FaaS** | monolith holds ~20 MB resident 24/7; FaaS scales to zero |
+| Cross-request state leak | **FaaS** | monolith's shared `_CTX` mis-attributes bookings; FaaS has no shared context |
+
+Plus ease-of-change (Part 3): a cross-cutting atomic change favors Traditional;
+adding an independent operation favors FaaS.
 
 ## Prerequisites
 
@@ -56,29 +66,35 @@ The two architectures' defining traits flip the winner by workload:
 PYTHON=python ./script.sh   # Windows (Git Bash), where the launcher is `python`
 ```
 
-`script.sh` runs the op sanity tests, replays the deterministic workload
-through both architectures, checks their final states match, and runs both
-concurrency experiments (and `perf` if present).
+`script.sh` runs both sides' unit tests, replays the deterministic workload
+through both architectures, and runs all six experiments (and `perf` if
+present).
 
 Individual pieces:
 
 ```bash
-python -m common.test_operations                 # op-correctness unit checks
-python -m common.workload 42 200 fixture.json    # generate a workload
+python -m common.test_operations                 # FaaS-core op unit checks
+python -m Traditional.test_monolith              # monolith unit checks
+python -m common.workload 42 2000 fixture.json   # generate a workload
 python -m Traditional.server --workload fixture.json   # Traditional replay
 python -m Traditional.server --serve --port 8080       # Traditional as a live HTTP server
 python -m FaaS.gateway --workload fixture.json         # FaaS replay
-python -m bench.seat_race                              # concurrency: seat-booking race
-python -m bench.parallel_throughput                   # concurrency: parallel CPU throughput
+python -m bench.context_leak                           # correctness: cross-request leak (FaaS wins)
+python -m bench.fault_isolation                        # resilience: crash blast radius (FaaS wins)
+python -m bench.idle_footprint                         # cost: idle memory / scale-to-zero (FaaS wins)
+python -m bench.parallel_throughput                    # parallel CPU throughput (FaaS wins)
+python -m bench.state_growth                           # latency under state growth (Traditional wins)
+python -m bench.seat_race                              # shared-state consistency
 ```
 
 ## Layout
 
 ```
-common/      shared business logic (operations.py), reference data, workload, tests
-Traditional/ monolith: in-memory state + stdlib HTTP server
+common/      FaaS-core business logic (operations.py), reference data, workload, tests
+Traditional/ naive monolith (server.py = whole system in one file) + its unit tests
 FaaS/        functions (one per op), sqlite storage, gateway, go_live orchestrator
-bench/       the two concurrency experiments
+bench/       the six experiments (context_leak, fault_isolation, idle_footprint,
+             parallel_throughput, state_growth, seat_race)
 profiling/   perf wrappers for Part 4
 report/      Typst report + team IDs
 ```

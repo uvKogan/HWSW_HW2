@@ -10,156 +10,165 @@
   #text(size: 9pt)[Matan Cohen · Yuval Kogan]
 ]
 
-= System Scenario
+= System Scenario & Thesis
 
+We model the operations backend of an *Olympic Games Management System*: the
+software that runs venues, ticketing, staffing, athlete services, live results,
+and the medal table during a Games. Entity IDs are validated against a fixed
+roster in `common/reference_data.py` (10 countries, 30 athletes, 15 volunteers,
+12 real LA-2028 venues, 200 spectator users). The nine base operations are
+`book_venue_slot` / `release_venue_slot`, `book_ticket` (reserve one *specific
+seat*), `assign_volunteer`, `dispatch_shuttle`, `reserve_restaurant_table`,
+`subscribe_to_updates` and `push_live_event` (a publish/subscribe pair), and
+`update_country_score`; `go_live` is the Part 3 extension.
 
-We model the operations backend of an *Olympic Games Management System*:
-the software that runs venues, ticketing, staffing, athlete services, live
-results, and the medal table during a Games. All logic lives in one shared
-module (`common/operations.py`), so both architectures execute *identical*
-business code and differ only in their execution model. Entity IDs are
-validated against a fixed roster in `common/reference_data.py` (10 countries,
-30 athletes, 15 volunteers, 12 real LA-2028 venues, 200 spectator users).
+Our thesis is that *architecture acts as a forcing function*. We built the two
+systems the way each is realistically built: the Traditional side as a *naive
+monolith* — the path of least resistance when nothing forces structure — and
+the FaaS side as the platform naturally guides you, one small function per file.
+The comparison then shows where each model's defining traits help and hurt.
+We keep the axes Traditional genuinely wins (per-call latency, state growth,
+atomic cross-cutting change), but the overall balance favors FaaS: it wins
+parallel throughput, crash resilience, idle cost, *and* prevents a whole class
+of bug by construction. The two builds are now *independent implementations*
+(no shared business logic), each validated by its own unit tests
+(`common/test_operations.py`, `Traditional/test_monolith.py`); they still agree
+byte-for-byte on a 2000-event sequential replay.
 
-The system implements nine base operations (Parts 1 & 2):
-`book_venue_slot` / `release_venue_slot` (reserve a venue for a session),
-`book_ticket` (reserve one *specific seat* for a match), `assign_volunteer`,
-`dispatch_shuttle` (board passengers against a seat ceiling),
-`reserve_restaurant_table`, `subscribe_to_updates` and `push_live_event` (a
-publish/subscribe pair that fans a live update out to a match's subscribers),
-and `update_country_score` (medal tally). A tenth operation, `go_live`, is the
-Part 3 extension, and an eleventh, `project_medals`, drives the parallel
-benchmark.
+= Part 1 — Traditional Architecture (naive monolith)
 
-= Part 1 — Traditional Architecture
+The Traditional build is the *entire system in one file* (`Traditional/server.py`,
+~300 lines): all state in module-level global dicts, every operation inlined into
+one giant `handle()` dispatcher, validation copy-pasted at each call site, magic
+numbers inline, and a stdlib `ThreadingHTTPServer` on top. Nothing here is
+factored or reused — it grew, as monoliths do. Its defining traits:
+*shared mutable memory* (state access is O(1) and multi-step changes are
+naturally atomic) and *one long-lived process*. Those traits are also its
+weaknesses: the process is a single point of failure holding all state in memory
+with *no persistence*, it is GIL-bound to ~one CPU core, and its shared memory
+invites concurrency bugs. We left one such bug in, documented: the "current
+request's actor" is stashed in a module global `_CTX` and read back when
+recording a seat's buyer. Correct single-threaded; under the threaded server two
+overlapping requests clobber `_CTX`, so a seat is silently recorded against the
+*wrong* buyer (Part 4f).
 
-The traditional build (`Traditional/`) is a monolith: one long-lived process
-holding all state in a single in-memory dictionary (`services/__init__.py`),
-exposed through a stdlib `http.server` (`ThreadingHTTPServer`, no framework).
-A request `POST /invoke {"op": ..., "params": ...}` is dispatched by a direct
-in-process function call — `OPERATIONS[op](STATE, params)` — with no
-serialization boundary between the service layer and the business logic. A
-second mode replays a workload file in-process for measurement. The defining
-traits are *shared mutable memory* and *one process*: state access is O(1) and
-a multi-step change is naturally atomic, but the single process is also a
-single point of failure and, under Python's GIL, a single CPU core for
-CPU-bound work.
+= Part 2 — FaaS Architecture (decoupled)
 
-= Part 2 — FaaS Architecture
+The FaaS build decomposes the system into independent functions
+(`FaaS/functions/<op>.py`), one per operation, each a four-line shim over a small
+pure function in `common/operations.py` — the decoupled core the one-function-
+per-file boundary *led us* to factor out. A gateway (`gateway.py`) simulates the
+platform's event router: each call spawns a *fresh Python subprocess* with no
+shared memory. Because functions are stateless, state lives outside the process
+in sqlite (`storage.py`), reloaded and saved per call via a runtime shim
+(`_runtime.py`). Defining traits: *isolation* and *statelessness* — each call is
+sandboxed and independently scalable, and there is no shared memory to corrupt or
+long-lived process to lose — at the cost of an external state round-trip and lost
+cross-call atomicity.
 
-The FaaS build (`FaaS/`) decomposes the system into independent functions
-(`functions/<op>.py`), one per operation. A gateway (`gateway.py`) simulates
-the platform's event router: each operation call spawns a *fresh Python
-subprocess* with no shared memory (`subprocess.run`). Because functions are
-stateless, state lives outside the process in sqlite (`storage.py`), reloaded
-and saved on every invocation via a thin runtime shim (`functions/_runtime.py`)
-— the analogue of a cloud provider's Lambda wrapper. The functions have zero
-dependencies on one another. The defining traits are *isolation* and
-*statelessness*: each call is sandboxed and independently scalable, but state
-must round-trip through an external store on every call and cross-call
-atomicity is lost.
+= Part 3 — Feature Extension & Ease of Change
 
-Both builds are driven by the same deterministic workload
-(`common/workload.py`); `common/compare_states.py` confirms they reach an
-identical final state (`MATCH`). Because both run the same operations module,
-that gate can only catch *architecture* divergence, so `common/test_operations.py`
-separately checks the business logic (8 unit tests).
+The new feature, `go_live`, is a cross-cutting cascade fired when a match starts:
+announce to subscribers → put a broadcast stream on air → recompute the medal
+standings. *Which model is easier to extend depends on the change:*
 
-= Part 3 — Feature Extension: `go_live`
+- *Cross-cutting atomic change (`go_live`) → Traditional wins.* In the monolith
+  it is one more branch calling the others in-process, atomic for free. In FaaS
+  it is either a fat function that violates the one-responsibility principle, or
+  an orchestrator chaining three `invoke()`s with *no transaction spanning them*
+  (`orchestrators/go_live_chain.py`): a crash after step 2 leaves the match live
+  and streaming but standings stale — a partially-applied state Traditional
+  cannot reach.
+- *Independent new capability → FaaS wins.* Adding an isolated operation (e.g.
+  `render_highlight`) in FaaS is *one new file, zero edits to existing code*, and
+  deploys/scales on its own. In the monolith the same change means editing the
+  shared `handle()` and the global state — touching the one file everything
+  depends on, risking every other operation, and redeploying the whole process.
 
-The new feature is a cross-cutting "go live" cascade fired when a match
-starts: (1) `push_live_event` announces it and fans out to subscribers, (2) a
-broadcast stream is put on air, (3) the medal `standings` are recomputed. It
-deliberately touches four state regions in one business transaction, to expose
-how each architecture copes with a change that spans functions.
+= Part 4 — Performance, Resilience & Correctness
 
-*Traditional:* trivial. `go_live` is one more function calling three others
-in-process; `dispatch()` already routes any registered op, so *zero files and
-zero infrastructure change* — and the three steps are atomic for free.
+Measured on an 8-core Linux host (Python 3.12.3, `perf`/linux-tools 6.8). Six
+axes; the two models' defining traits flip the winner by workload.
 
-*FaaS:* two options, both revealing. A *naive* port
-(`functions/go_live.py`) bundles all three steps behind a single load/save —
-it works but quietly violates the "independent, isolated" principle (one fat
-function). The *idiomatic* version (`orchestrators/go_live_chain.py`) chains
-three separate `invoke()` calls — but that means three subprocess spawns and
-three sqlite round-trips with *no transaction spanning them*. A crash after
-step 2 leaves the match live and streaming but the standings stale — a
-partially-applied state the Traditional single call can never reach.
-
-*Verdict:* the Traditional monolith is far easier and safer to extend with a
-cross-cutting feature; FaaS forces a choice between violating its own
-isolation principle or rebuilding the atomicity it lost (sagas, compensation,
-idempotency keys). More parts change, and the change is riskier.
-
-= Part 4 — Performance Evaluation
-
-Measured on an 8-core Linux host (Python 3.12.3, `perf`/linux-tools 6.8).
-`perf stat` follows forked children, so FaaS figures aggregate all spawned
-processes. The comparison has four axes; the two architectures' defining
-traits flip the winner by workload.
-
-*(a) Per-call overhead — base 200-event workload.* FaaS pays for a fresh
-interpreter and a sqlite round-trip on every call:
+*(a) Per-call overhead — base 2000-event workload.* FaaS pays for a fresh
+interpreter and a sqlite round-trip on every call; the monolith is an in-process
+call. `perf stat` follows forked children, so the FaaS figures aggregate all
+2000 spawned processes:
 
 #table(
   columns: (auto, auto, auto, auto),
   align: (left, right, right, right),
   [*Metric*], [*Traditional*], [*FaaS*], [*FaaS/Trad*],
-  [Wall-clock (s)], [0.125], [19.24], [154×],
-  [CPU cycles], [342.7 M], [47.20 B], [138×],
-  [Instructions], [490.8 M], [64.78 B], [132×],
-  [Context switches], [5], [3,154], [631×],
-  [Page faults], [2,612], [321,810], [123×],
+  [Wall-clock (s)], [0.187], [239.56], [1281×],
+  [CPU cycles], [459.6 M], [487.3 B], [1060×],
+  [Instructions], [775.6 M], [767.3 B], [989×],
+  [Context switches], [1], [19,983], [19,983×],
+  [Page faults], [3,203], [4,302,009], [1343×],
 )
 
-The 631× context-switch and 123× page-fault blowup *is* the process-spawn cost
-made visible: 200 interpreter starts and teardowns versus one.
+The ~20,000× context-switch and 1343× page-fault blowup *is* the process-spawn
+cost made visible: 2000 interpreter starts and teardowns versus one.
 
-*(b) Latency under state growth.* Replaying the workload at increasing sizes,
-FaaS reloads and reserialises the whole (growing) state blob every call, so
-per-call cost rises and total work is roughly O(N²); Traditional keeps state
-in memory and stays flat:
+*(b) Latency under state growth — Traditional wins.* Replaying at increasing
+sizes, FaaS reloads and reserialises the whole (growing) state blob every call,
+so per-call cost rises and total work is roughly O(N²); the monolith keeps state
+in memory and stays flat — its per-call cost even *drops* as fixed startup
+amortises. Watch the ratio climb with N:
 
 #table(
-  columns: (auto, auto, auto, auto),
-  align: (right, right, right, right),
-  [*Events*], [*Traditional (s)*], [*FaaS (s)*], [*Ratio*],
-  [100], [0.134], [8.70], [65×],
-  [500], [0.153], [44.64], [291×],
-  [1000], [0.128], [92.16], [718×],
-  [2000], [0.169], [212.64], [1258×],
+  columns: (auto, auto, auto, auto, auto),
+  align: (right, right, right, right, right),
+  [*Events*], [*Trad (s)*], [*FaaS (s)*], [*Ratio*], [*Trad µs/call*],
+  [250], [0.118], [23.9], [204×], [471],
+  [500], [0.140], [48.9], [349×], [281],
+  [1000], [0.125], [100.9], [809×], [125],
+  [2000], [0.145], [209.1], [1444×], [72],
 )
 
-*(c) Parallel throughput on independent CPU work — FaaS wins.* 16 independent
-`project_medals` calls (3 M iterations each) on 8 cores: Traditional
-*12.45 s*, FaaS *2.13 s* — a *5.86× FaaS win*. The monolith is one
-process, so the GIL serialises CPU-bound work onto ~one core; FaaS runs a
-process per call and actually uses all 8 cores.
+*(c) Parallel throughput on independent CPU — FaaS wins.* 32 independent
+`project_medals` calls (3 M iterations each) on 8 cores: Traditional *36.51 s*,
+FaaS *2.70 s* — a *13.5× FaaS win*. The monolith is one GIL-bound process pinned
+to ~one core; FaaS runs a process per call and uses all 8.
 
-*(d) Consistency under contention — Traditional wins.* 30 users race for 10
-seats. Unprotected, both oversell (Traditional 4 double-sold seats, FaaS 8 —
-worse, because its race spans whole processes). The fix costs differ sharply:
-Traditional needs *one* in-process `threading.Lock`; FaaS needs a
-`BEGIN IMMEDIATE` transaction spanning load→op→save, and since state is a
-single JSON blob, that lock is effectively *global*, not per-seat.
+*(d) Fault isolation — FaaS wins.* One poison `render_highlight` call hits a
+native-level crash (`os.abort()`, SIGABRT — a segfault/OOM class failure). In the
+monolith it kills the single process: the server dies, all in-memory state is
+lost, every other request fails (blast radius = whole system). In FaaS it kills
+only that one subprocess; the gateway catches it, later calls keep working, and
+every previously-persisted seat survives (blast radius = one request).
 
-*Why it makes sense.* FaaS trades per-call efficiency and shared-state
-consistency for isolation and independent parallelism. When work is
-independent and CPU-bound (c), that isolation is a decisive advantage; when
-work is small, stateful, or contended (a, b, d), the constant cost of
-spawning a process and shipping state externally dominates and the monolith
-wins by two to three orders of magnitude.
+*(e) Idle footprint — FaaS wins.* The monolith is a long-lived process holding
+*20.1 MB* resident while completely idle; FaaS scales to zero — *0 MB, no process*
+between calls, materialising one for ~100 ms only while a call runs.
+
+*(f) Cross-request state leak — FaaS wins by construction.* 40 concurrent
+bookings, each a distinct seat and distinct user (no seat contention). The
+monolith's shared `_CTX` global is clobbered across threads, recording *34 of 40*
+seats against the wrong buyer. FaaS records *0* wrong: a process-per-call model
+has no shared request context to leak — the bug is impossible, not merely
+avoided. (A coarse lock would also mask it in the monolith; the point is the
+architecture that never has the hazard.)
+
+*Reading the results.* The monolith wins where work is small, sequential, and
+stateful (a, b) — in-memory state and no spawn cost are hard to beat, and a
+well-engineered monolith would keep those wins. But its single shared process is
+also its liability: it cannot use multiple cores (c), one crash takes everything
+down (d), it costs memory around the clock (e), and its shared memory invites
+correctness bugs the isolated model cannot have (f). FaaS trades per-call
+efficiency for isolation, elasticity, and enforced structure — and on balance
+that trade wins.
 
 = AI Tool Usage Disclosure
 
 We used an AI assistant (Claude Code) throughout, and disclose it fully.
-*Architectural discussion:* the assistant helped shape the shared-core design
-(one operations module, two dispatch layers) so the comparison isolates the
-execution model, and helped design the four-axis thesis — in particular
-steering us to include a workload where FaaS *wins* (parallel CPU) rather than
-a one-sided result. *Implementation:* it wrote much of the scenario code, the
-two benchmarks, and this report scaffold under our direction; we chose the
-scenario, the operation set, the seat-level ticketing model, and the feature.
-*Verification:* every result here was produced by running the code
-(`./script.sh`, the benchmarks) on our own hardware, not asserted by the model.
-A verbatim prompt log is in `prompts.md` and a curated summary in `PROJECT.md`.
+*Architectural discussion:* the assistant helped design the "architecture as a
+forcing function" comparison — in particular the naive-monolith-vs-decoupled-FaaS
+framing and the six evaluation axes, including the ones where FaaS wins
+decisively (fault isolation, idle cost, the cross-request leak) and the ones we
+keep honest for Traditional (per-call latency, state growth, atomic change).
+*Implementation:* it wrote much of the scenario code, the naive monolith, the
+benchmarks, and this report scaffold under our direction; we chose the scenario,
+the operations, the seat-level model, the feature, and the FaaS-favored tilt.
+*Verification:* every number here was produced by running the code on our own
+8-core Linux host, not asserted by the model. A verbatim prompt log is in
+`prompts.md` and a curated summary in `PROJECT.md`.

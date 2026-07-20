@@ -4,7 +4,7 @@
     "Matan Cohen",
     "Yuval Kogan"
   ],
-  "last_updated": "2026-07-20",
+  "last_updated": "2026-07-21",
   "scenario": "Olympic Games Management System",
   "scenario_options": [
     "hospital",
@@ -25,19 +25,19 @@
     },
     "part1_traditional": {
       "status": "done",
-      "notes": "Real ops wired; ThreadingHTTPServer /invoke mode + threading.Lock seat fix (OLYMPICS_TICKET_LOCK). Verified via correctness gate (MATCH) + seat-race benchmark."
+      "notes": "Naive monolith (Traditional/server.py, one file): module-global mutable state, one giant handle(), inlined/duplicated validation, no persistence, documented _CTX cross-request leak bug, env-gated coarse lock. Own tests: Traditional/test_monolith.py."
     },
     "part2_faas": {
       "status": "done",
-      "notes": "9 base + Part 3 functions as subprocess-per-call stubs; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) for the seat fix; go_live_chain orchestrator. Verified MATCH vs Traditional."
+      "notes": "Clean decoupled FaaS: one function per file (FaaS/functions/) over the pure-function core common/operations.py; subprocess-per-call gateway; sqlite external state; transactional_apply (OLYMPICS_FAAS_TXN) seat fix; go_live_chain orchestrator; render_highlight fault-demo function. Own tests: common/test_operations.py."
     },
     "part3_feature_extension": {
       "status": "done",
-      "notes": "go_live cross-cutting cascade (push_live_event fan-out -> allocate_stream -> recompute_standings), pure Python. Naive single-function vs idiomatic 3-invoke orchestrator both shipped. project_medals parallel-throughput op for the FaaS-win axis."
+      "notes": "go_live cross-cutting cascade + ease-of-change analysis: cross-cutting atomic change favors Traditional (one atomic call), adding an independent op favors FaaS (one new file vs editing the shared monolith). render_highlight poison op added for the fault demo."
     },
     "part4_performance": {
       "status": "done",
-      "notes": "Measured on matanco.space (Linux, multicore): perf stat both architectures, state-growth scaling, seat-race (before/after fix), parallel-throughput (FaaS speedup). Numbers in report/results.md, tables in report."
+      "notes": "Six axes on 8-core Linux (Python 3.12, perf 6.8): per-call overhead + state-growth O(N^2) (Traditional wins); parallel throughput ~13.5x, fault isolation, idle footprint 20MB->0, cross-request leak 34/40->0 (FaaS wins). Numbers in report/results.md."
     },
     "part5_security_maintainability": {
       "status": "optional_not_started",

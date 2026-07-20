@@ -5,6 +5,15 @@
 > work lands. `STATUS.json` / `PROJECT.md` hold coarse per-Part status; this
 > file holds the fine-grained steps and commit boundaries.
 
+> ⚠️ **DESIGN PIVOT (2026-07-21).** After the balanced A–H build below was
+> complete, the team pivoted to a **FaaS-favored "architecture as a forcing
+> function"** design: Traditional rewritten as a one-file *naive monolith*
+> (its own logic, not the shared core), correctness relaxed to independent
+> per-side unit tests, workload scaled up, and three new FaaS-winning
+> benchmarks added. See **PROJECT.md** for the current architecture and the
+> **Reimplementation phase log** at the end of this file. The A–H sections
+> below are the (now superseded) original balanced build, kept for history.
+
 ## Context
 
 HW2 implements the same system twice — a **traditional monolith** (one
@@ -186,6 +195,31 @@ commit boundary.
       assembles `HW2.zip` (required + supporting files, cruft stripped).
       Verified on matanco.space: 55 files, ~104K, distinct PDF per ID.
 - [x] **COMMIT**: `0061495` "Add make_submission.sh + compile-time ID injection (HW1 pattern)"
+
+## Reimplementation phase log (2026-07-21) — FaaS-favored pivot
+
+The A–H build above was a *balanced* comparison over a shared core. The team
+then pivoted to "architecture as a forcing function." Phases below; each ended
+at a commit (all on `main`).
+
+- [x] **Phase 1 — Naive monolith + poison op + independent validation.**
+      Rewrote `Traditional/server.py` as a one-file naive monolith (global
+      state, no persistence, one `handle()`, documented `_CTX` leak, env-gated
+      lock); deleted `Traditional/services/`; added `render_highlight` poison
+      op (both sides) + `Traditional/test_monolith.py`; dropped the hard MATCH
+      gate from `script.sh`. → `6f0a0a7`
+- [x] **Phase 2 — Scale up.** Grew workload pools + default 200→2000 events;
+      extended `state_growth` sizes; raised `parallel_throughput` defaults.
+      → `5c3c3d0`
+- [x] **Phase 3 — New FaaS-win benchmarks.** `context_leak`, `fault_isolation`,
+      `idle_footprint` + wiring into `script.sh`. → `6f1e538`; server backlog +
+      client-timeout hardening → `<robustness>`
+- [x] **Phase 4 — Re-measure on matanco.space (8-core Linux).** perf stat both
+      sides; state-growth; parallel throughput (13.5×); leak (34/40→0); fault
+      isolation; idle (20 MB→0). Numbers → `report/results.md`.
+- [x] **Phase 5 — Report rewrite + docs + submission.** Rewrote `report.typ`
+      (six axes, forcing-function thesis); updated PROJECT/STATUS/README/this
+      tracker; rebuilt `HW2.zip`.
 
 ## Operation catalog
 
