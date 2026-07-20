@@ -36,11 +36,23 @@ echo "== informational: do the two independent implementations agree on the repl
 "$PY" -m common.compare_states results/traditional_final_state.json results/faas_final_state.json || \
   echo "   (states differ -- expected-tolerable now that the implementations diverge)"
 
-echo "== concurrency experiment 1: seat-booking race (Traditional-favoured axis) =="
+echo "== experiment: seat-booking race (shared-state consistency) =="
 "$PY" -m bench.seat_race --users 30 --seats 10 --delay 0.02
 
-echo "== concurrency experiment 2: parallel throughput, independent CPU (FaaS-favoured axis) =="
-"$PY" -m bench.parallel_throughput --tasks 16 --iterations 3000000
+echo "== experiment: cross-request state leak (FaaS wins by construction) =="
+"$PY" -m bench.context_leak --seats 40 --delay 0.01
+
+echo "== experiment: fault isolation / crash blast radius (FaaS wins) =="
+"$PY" -m bench.fault_isolation
+
+echo "== experiment: idle footprint / scale-to-zero (FaaS wins) =="
+"$PY" -m bench.idle_footprint
+
+echo "== experiment: parallel throughput, independent CPU (FaaS wins) =="
+"$PY" -m bench.parallel_throughput --tasks 32 --iterations 5000000
+
+echo "== experiment: latency under state growth (Traditional wins) =="
+"$PY" -m bench.state_growth
 
 if command -v perf >/dev/null 2>&1; then
     echo "== profiling with perf =="
