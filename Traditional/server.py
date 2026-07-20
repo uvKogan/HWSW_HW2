@@ -339,6 +339,7 @@ class InvokeHandler(BaseHTTPRequestHandler):
 
 
 def run_server(port):
+    ThreadingHTTPServer.request_queue_size = 256  # absorb bursty concurrent connects
     httpd = ThreadingHTTPServer(("127.0.0.1", port), InvokeHandler)
     print(f"Traditional (naive monolith) listening on http://127.0.0.1:{port}/invoke")
     httpd.serve_forever()

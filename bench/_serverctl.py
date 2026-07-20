@@ -48,5 +48,5 @@ def post_invoke(port: int, op: str, params: dict) -> dict:
         f"http://127.0.0.1:{port}/invoke", data=body,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=300) as r:
         return json.loads(r.read())
