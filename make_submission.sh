@@ -51,6 +51,14 @@ cp "${REPO}/README.md"         "${OUT}/"        # how to run
 cp "${REPO}/prompts.md"        "${OUT}/"        # AI-usage disclosure (required)
 cp "${REPO}/report/results.md" "${OUT}/report/" # measured Part 4 numbers
 
+# Interactive flamegraphs from the primary host (§4g). Static PNGs are already
+# baked into the report PDF; these SVGs let the reader zoom/hover. (The 15 MB
+# cross-check-host SVG is intentionally omitted to keep the archive small.)
+if [ -d "${REPO}/results/flamegraphs/naranja14" ]; then
+  mkdir -p "${OUT}/flamegraphs"
+  cp "${REPO}/results/flamegraphs/naranja14/"*.svg "${OUT}/flamegraphs/" 2>/dev/null || true
+fi
+
 # ── 4. Strip build cruft that cp -r may have pulled in ───────────────────────
 find "${OUT}" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "${OUT}" -type f \( -name '*.pyc' -o -name '*.db' -o -name 'workload_fixture.json' \) -delete
