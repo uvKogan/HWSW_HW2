@@ -4,6 +4,7 @@
 #set par(justify: true)
 #show heading.where(level: 1): it => text(size: 12pt, weight: "bold")[#it]
 #show heading.where(level: 2): it => text(size: 10.3pt, weight: "bold")[#it]
+#show link: set text(fill: rgb("#14477d"))
 
 #align(center)[
   #box(image("fig/la28.png", width: 1.6cm))
@@ -21,11 +22,13 @@ shuttles ferry athletes between the village and twelve venues; in a control room
 the medal table flips the instant the photo-finish is confirmed, and the result
 reaches millions of second-screen fans a heartbeat later. Then the gun goes off,
 and the entire crowd refreshes at once. Behind all of it sits one *operations
-backend*: the software that runs venues, ticketing, staffing, athlete services,
-live results, and the medal table. We build that backend *twice*, once as a
+backend* (which, for some reason, two students wrote for a homework assignment,
+and since it was free the Olympic committee decided to use it): the software that
+runs venues, ticketing, staffing, athlete services, live results, and the medal
+table. We build that backend *twice*, once as a
 traditional monolith and once as a set of serverless functions, and let the
 Games' own workload decide which architecture holds up. (We come back to this
-100 m-final night in §4 (c2), when the whole stadium hits the system at once.)
+100 m-final night in #link(<ax-c2>)[§4(c2)], when the whole stadium hits the system at once.)
 
 The system is grounded in a fixed roster (`common/reference_data.py`): 10
 countries, 30 athletes, 15 volunteers, 12 real LA-2028 venues, and 200 spectator
@@ -35,7 +38,7 @@ string. Its twelve operations:
 - *`book_venue_slot` / `release_venue_slot`*: claim or free a venue for a match; a
   venue holds one match at a time, so a double-booking is rejected.
 - *`book_ticket`*: reserve one *specific numbered seat* for a spectator; a seat
-  already sold is refused (the seat-level model that makes the §4f leak concrete).
+  already sold is refused (the seat-level model that makes the #link(<ax-f>)[§4(f)] leak concrete).
 - *`assign_volunteer`*: roster a volunteer to a venue for the day.
 - *`dispatch_shuttle`*: send a shuttle on a village→venue route with a seat capacity.
 - *`reserve_restaurant_table`*: seat an athlete's party (bounded size) in a village
@@ -47,9 +50,9 @@ string. Its twelve operations:
 - *`go_live`* (Part 3): a cross-cutting cascade fired when a match starts (announce
   to subscribers → stream on air → recompute standings).
 - *`render_highlight`*: render a match highlight reel; a corrupted input triggers a
-  native crash, our fault-injection probe (§4d).
+  native crash, our fault-injection probe (#link(<ax-d>)[§4(d)]).
 - *`project_medals`*: a CPU-bound, read-only Monte-Carlo medal projection that
-  touches no state, the embarrassingly-parallel workload behind (c) and (c2).
+  touches no state, the embarrassingly-parallel workload behind #link(<ax-c>)[(c)] and #link(<ax-c2>)[(c2)].
 
 Our thesis is that *architecture acts as a forcing function*. We built the two
 systems the way each is realistically built: the Traditional side as a *naive
@@ -79,7 +82,7 @@ GIL-bound to ~one CPU core, and its shared memory invites concurrency bugs. We
 left one such bug in, documented: the "current request's actor" is stashed in a
 module global `_CTX` and read back when recording a seat's buyer. Correct
 single-threaded; under the threaded server two overlapping requests clobber
-`_CTX`, so a seat is silently recorded against the *wrong* buyer (§4f).
+`_CTX`, so a seat is silently recorded against the *wrong* buyer (#link(<ax-f>)[§4(f)]).
 
 = Part 2: FaaS Architecture (decoupled)
 
@@ -141,7 +144,7 @@ under `bench/` and is wired into `script.sh`.
 *Correctness & variance.* The two sides are *independent* implementations, each
 validated on its own: `common/test_operations.py` (8 tests over the FaaS core)
 and `Traditional/test_monolith.py` (10 tests over the monolith, including that
-single-threaded booking attributes correctly; the §4f bug is concurrency-only).
+single-threaded booking attributes correctly; the #link(<ax-f>)[§4(f)] bug is concurrency-only).
 `common/compare_states.py` confirms the two structurally different builds still
 produce matching final states after the replay. Effects below span one-to-three
 orders of magnitude, so one representative run suffices and the *ratios*, not the
@@ -166,7 +169,7 @@ then each axis in detail:
   [(f) Cross-request leak], [*FaaS*], [39/40 wrong vs. 0 wrong],
 )
 
-*(a) Per-call overhead: base 2000-event workload.* FaaS pays for a fresh
+*(a) Per-call overhead: base 2000-event workload.*<ax-a> FaaS pays for a fresh
 interpreter and a sqlite round-trip on every call; the monolith is one
 in-process call.
 
@@ -202,14 +205,14 @@ amortises. Watch the ratio climb with N:
   [2000], [0.136], [372.0], [2740×], [68],
 )
 
-*(c) Parallel throughput on independent CPU: FaaS wins.* 32 independent
+*(c) Parallel throughput on independent CPU: FaaS wins.*<ax-c> 32 independent
 `project_medals` calls (3 M iterations each) on 8 vCPUs: Traditional *26.9 s*,
 FaaS *3.5 s*, a *7.6× FaaS win* on the KVM guest (and *13.5×* on the bare
 8-core cross-check host, where scheduling overhead is lower). The monolith is
 one GIL-bound process pinned to ~one core; FaaS runs a process per call and uses
 every core.
 
-*(c2) Spike / load under pressure: FaaS wins.* Back to the 100 m final: the gun
+*(c2) Spike / load under pressure: FaaS wins.*<ax-c2> Back to the 100 m final: the gun
 fires, the result posts, and the whole stadium refreshes the live standings in
 the same second. That is the "DoS it and watch it degrade" test. We ramp
 simultaneous clients 8→512 and fire a 512-request burst of `project_medals`
@@ -247,7 +250,7 @@ parallelism.
     migrated across all eight cores rather than eight cores running in parallel.],
 )
 
-*(d) Fault isolation: FaaS wins.* One poison `render_highlight` call hits a
+*(d) Fault isolation: FaaS wins.*<ax-d> One poison `render_highlight` call hits a
 native-level crash (`os.abort()`, SIGABRT, a segfault/OOM class failure). In the
 monolith it kills the single process: the server dies, all in-memory state is
 lost, every other request fails (blast radius = whole system). In FaaS it kills
@@ -258,7 +261,7 @@ all 8 previously-persisted seats survive (blast radius = one request).
 *17.4 MB* resident while completely idle; FaaS scales to zero: *0 MB, no process*
 between calls, materialising one for ~44 ms only while a call runs.
 
-*(f) Cross-request state leak: FaaS wins by construction.* 40 concurrent
+*(f) Cross-request state leak: FaaS wins by construction.*<ax-f> 40 concurrent
 bookings, each a distinct seat and distinct user (no seat contention). The
 monolith's shared `_CTX` global is clobbered across threads, recording *39 of 40*
 seats against the wrong buyer. FaaS records *0* wrong: a process-per-call model
@@ -268,7 +271,7 @@ never has the hazard.)
 
 == Where the cycles go (flamegraphs)
 
-*(g)* CPython's `perf` trampoline (`-X perf`) makes `perf` resolve Python-level
+*(g)*<ax-g> CPython's `perf` trampoline (`-X perf`) makes `perf` resolve Python-level
 frames, so a cycle-attributed flamegraph shows *what* each model spends cycles
 on, not merely how many. The split is stark (ranges span the two hosts):
 
@@ -296,7 +299,7 @@ The FaaS flamegraph makes it visual (both full interactive SVGs are in
     the actual work.],
 )
 
-This is the mechanism *behind* the aggregate blow-up in (a).
+This is the mechanism *behind* the aggregate blow-up in #link(<ax-a>)[(a)].
 
 *A `perf`-in-a-VM gotcha (primary host).* On the KVM guest, `perf stat` counts
 correctly but `perf record -F 999` captured *zero* samples: the slow virtual-PMU
@@ -328,7 +331,7 @@ bounds the blast radius of a change to a single function; the monolith's one
 `handle()` means every edit risks every operation and forces a whole-process
 redeploy. *Security:* isolation gives each FaaS function its own process and a
 natural least-privilege boundary: a compromised or buggy function cannot read
-the whole system's in-memory state, and indeed the §4f leak is a
+the whole system's in-memory state, and indeed the #link(<ax-f>)[§4(f)] leak is a
 *confidentiality* failure (one user's identity bleeding into another's record)
 that only exists because the monolith shares one memory space across all
 requests. The honest counterweight is that FaaS enlarges the surface to secure:
@@ -337,20 +340,21 @@ process for a distributed system to lock down.
 
 = AI Tool Usage Disclosure
 
-We used an AI assistant (Claude Code) throughout, and disclose it fully.
+We used an AI assistant (Claude Code) throughout, and disclose it fully. \
 *Architectural discussion:* the "architecture as a forcing function" comparison
-(the naive-monolith-vs-decoupled-FaaS framing) was *our* idea; the assistant
+(the naive-monolith-vs-decoupled-FaaS framing) was our idea; the assistant
 helped us keep it in mind through implementation, holding the monolith and the
 decoupled-FaaS structures consistent with that framing and helping shape the
 evaluation axes (parallel throughput, fault isolation, idle cost, the
 cross-request leak, and where Traditional stays ahead on per-call latency, state
-growth, and atomic change). *Implementation:* it wrote much of the scenario code,
+growth, and atomic change).\
+ *Implementation:* it wrote much of the scenario code,
 the naive monolith, the benchmarks, and this report scaffold under our direction;
-we chose the scenario, the operations, the seat-level model, and the feature.
+we chose the scenario, the operations, the seat-level model, and the feature. \
 *Debugging & profiling:* it set up the `perf`/flamegraph
 toolchain on both hosts and produced the flamegraphs; together we diagnosed the
-KVM sampling failure in §4g, tracing zero-sample `perf record` to sample-rate
-throttling of a slow virtual PMU interrupt, fixed with a fixed-period capture.
+KVM sampling failure in #link(<ax-g>)[§4(g)], tracing zero-sample `perf record` to sample-rate
+throttling of a slow virtual PMU interrupt, fixed with a fixed-period capture. \
 *Verification:* every number here was produced by running the code on our own
 hardware (two Linux hosts), not asserted by the model. A verbatim prompt log is
 in `prompts.md` and a curated summary in `PROJECT.md`.
