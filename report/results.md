@@ -135,3 +135,45 @@ matanco}/`.
 made the kernel throttle `perf_event_max_sample_rate` toward zero. Fix: fixed
 sampling period `perf record -c 2000000` (+ `--call-graph dwarf` since CPython
 has no frame pointers; non-precise events only, no guest PEBS).
+
+## (h) Performance isolation under a realistic mixed load — FaaS wins (`bench.mixed_burst`)
+
+A timestamped, narrative-shaped "Games day": 648 events over seven phases
+(background traffic, streaming peak, ticket rush, shuttle-boarding race, a
+CPU-bound medal-projection spike, wind-down) replayed through a paced,
+concurrency-capped dispatcher (`bench.bounded_dispatch`, pool size 16), medal
+phase = 150 projections × 2,000,000 iterations. naranja14 numbers.
+
+Phase wall-clock (s) and throughput (ops/s), Traditional vs FaaS:
+
+| Phase | Trad (s) | FaaS (s) | Trad ops/s | FaaS ops/s |
+|---|---|---|---|---|
+| background_trickle | 87.5 | 69.1 | 2.3 | 2.9 |
+| hotel_shuttle_prefill | 0.63 | 6.33 | 15.8 | 1.6 |
+| streaming_peak | 0.50 | 14.32 | 119.6 | 4.2 |
+| hotel_shuttle_spike | 0.29 | 7.87 | 62.2 | 2.3 |
+| ticket_rush_spike | 0.50 | 22.90 | 300.0 | 6.6 |
+| **live_medal_projection** | **84.41** | **12.21** | 1.8 | 12.3 |
+| wind_down | 5.27 | 21.88 | 11.4 | 2.7 |
+
+**live_medal_projection speedup: 6.91× → FaaS wins** (CPU-bound parallel work,
+embedded in a realistic mix).
+
+**Noisy-neighbor / performance isolation (the headline).** During the 84 s medal
+spike, unrelated light `background_trickle` requests sharing the monolith's
+process are starved by GIL monopolization; in FaaS they are unaffected:
+
+| Background-op latency during the medal spike | Traditional | FaaS |
+|---|---|---|
+| n (ops that ran during the spike) | 51 | 31 |
+| median (vs. outside the spike) | **527.6 ms** (2.7 ms) | 289.5 ms (975.8 ms) |
+| tail (max) | **3907 ms** | 5226 ms |
+| latency inflation caused by the heavy neighbor | **194×** | **0.3× (none)** |
+
+**Honest counterweight:** for cheap, high-frequency state ops, FaaS's per-call
+subprocess + sqlite tax makes it far slower per operation (ticket_rush_spike:
+Traditional 0.5 s vs FaaS 22.9 s) — the same overhead as (a). The mixed test
+shows both truths at once. Correctness under the ticket rush (locks/txn off,
+the default): Traditional double-sold 3/20 seats, FaaS 20/20 (naive load/save
+lost-update; a *different* bug class from the (f) attribution leak — both go to
+0 with `--lock --txn`). Chart: `results/mixed_burst/chart_naranja14.png`.

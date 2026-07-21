@@ -63,9 +63,9 @@ The comparison then evaluates the four dimensions the assignment asks about
 (performance, extensibility, maintainability, and security) and shows where each
 model's defining traits help and hurt. Traditional genuinely wins on per-call
 latency, state growth, and atomic cross-cutting change; FaaS wins on parallel
-throughput, load-spike resilience, crash resilience, and idle cost, *and*
-prevents a whole class of bug by construction, so on balance FaaS comes out
-ahead. The two builds are *independent implementations* (no shared business
+throughput, load-spike resilience, crash and performance isolation, and idle
+cost, *and* prevents a whole class of bug by construction, so on balance FaaS
+comes out ahead. The two builds are *independent implementations* (no shared business
 logic), each validated by its own unit tests; they still agree byte-for-byte on
 a 2000-event replay.
 
@@ -151,7 +151,7 @@ produce matching final states after the replay. Effects below span one-to-three
 orders of magnitude, so one representative run suffices and the *ratios*, not the
 absolute times, are the claim.
 
-== Results: seven axes
+== Results: eight axes
 
 The two models' defining traits flip the winner by workload. Scorecard first,
 then each axis in detail:
@@ -168,6 +168,7 @@ then each axis in detail:
   [(d) Fault isolation], [*FaaS*], [all state lost vs. 0 lost],
   [(e) Idle footprint], [*FaaS*], [17.4 MB resident vs. 0],
   [(f) Cross-request leak], [*FaaS*], [39/40 wrong vs. 0 wrong],
+  [(h) Perf. isolation (noisy neighbor)], [*FaaS*], [194× latency spike vs. none],
 )
 
 *(a) Per-call overhead: base 2000-event workload.*<ax-a> FaaS pays for a fresh
@@ -269,6 +270,39 @@ seats against the wrong buyer. FaaS records *0* wrong: a process-per-call model
 has no shared request context to leak; the bug is impossible, not merely
 avoided. (A coarse lock would also mask it; the point is the architecture that
 never has the hazard.)
+
+*(h) Performance isolation under a realistic mixed load: FaaS wins.*<ax-h> Every
+axis above isolates one variable and fires it all at once. `bench/mixed_burst.py`
+instead replays a timestamped, narrative-shaped "Games day" (648 events over
+seven phases: background traffic, a streaming peak, a ticket rush, a
+shuttle-boarding race, and a CPU-bound medal-projection spike) through a paced,
+concurrency-capped dispatcher, so the load resembles real bursty traffic rather
+than a synthetic flood. Two findings on naranja14. First, the CPU-bound spike,
+now embedded in the mix, still favours FaaS decisively: 150 independent
+projections take *84.4 s* on the monolith (one GIL-bound core) versus *12.2 s* on
+FaaS (a process per call across 8 vCPUs), a *6.9× win*. Second, the headline:
+during that 84 s spike, unrelated light background requests sharing the monolith's
+process are *starved*, their median latency jumping from *2.7 ms* to *527 ms*
+(*194×*, tail 3.9 s) purely because one heavy caller monopolises the GIL. In FaaS
+the same background requests are untouched (0.3×): each call is its own process,
+so a heavy neighbour cannot steal their CPU. This extends fault isolation
+(#link(<ax-d>)[§4(d)]) from *crashes* to *performance*, in the monolith one heavy
+caller silently degrades every unrelated request; FaaS contains the blast radius.
+
+#table(
+  columns: (auto, auto, auto),
+  align: (left, right, right),
+  inset: 4pt,
+  [*Background-op latency during the medal spike*], [*Traditional*], [*FaaS*],
+  [median (vs. outside the spike)], [527 ms (2.7 ms)], [290 ms (976 ms)],
+  [inflation caused by the heavy neighbour], [*194×*], [*0.3× (none)*],
+)
+
+The honest counterweight is the same overhead as #link(<ax-a>)[§4(a)]: for cheap,
+high-frequency state ops, FaaS's per-call subprocess + sqlite tax makes it far
+slower per operation (the ticket-rush phase: Traditional *0.5 s* vs FaaS
+*22.9 s*). The mixed test shows both truths at once, so it is evidence for the
+balance, not a one-sided win.
 
 == Where the cycles go (flamegraphs)
 
