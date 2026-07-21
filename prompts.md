@@ -133,3 +133,73 @@ Also rerun the skills like updating the prompts?
 ```
 This entry -- backfilling the prompt log by hand via the `log-prompt`
 skill since the automatic hook missed the whole session.
+
+## 2026-07-21T17:33:33Z
+
+```
+I am reading the report @report/report.typ 
+it says "All logic lives in one shared modul" - didn't we change it?
+```
+
+## 2026-07-21T18:10:11Z
+
+```
+explain @script.sh
+```
+
+## 2026-07-21T19:09:28Z
+
+```
+now let's talk the settings and the results.
+I see we simulate only 200 users. what will happend if we simulate 2k or 20k? I assume that we will see better results for FaaS if we have 5k streams or 3k users trying to buy a ticket at the same time - am I wrong?
+and another thing - don't we create a simulation over time with all functionalities? mixture of the different functions simulating the usage of real users/athletes/volunteers of the official app running the code we wrote?
+```
+
+## 2026-07-21T19:19:13Z
+
+```
+In my vision, I see a database of thousends of entries (with timestemps of execution?) performing multiple operations simulating the real olympic games - a venue is saved for a game, an athlete orders himself and his teammates food in one of the restourants while another team is ticketing the hotel which is currently full and then a streaming of a pupular game starts with a peak of streaming followed by ticket selling opened and a mass of users trying to buy tickets to the match and athletes are signed to the shuttle to go back to the room after a game and do their laundry - all this, using ALL functions, randomized, multiplied by hundreds, would be a suitable workload to show FaaS can win in the real world. what do you say?
+```
+
+## 2026-07-21T19:26:24Z
+
+```
+I just gave examples, we should use the existing ops.
+what is the effort of simulating this kind of workload?
+```
+
+## 2026-07-21T19:36:43Z
+
+```
+don't change existing files. plan the work by steps. check yourself between each step. plan the burst to work appropriatly with the given hardware we have. test should not be too long, but to expose that under stressed workloads FaaS will work better.
+```
+
+## 2026-07-21T20:10:12Z
+
+```
+now run it locally here to see how it goes, then summarize what we see.
+```
+
+## 2026-07-21T20:15:48Z
+
+```
+where is the workload we are running?
+```
+
+## 2026-07-21T20:17:24Z
+
+```
+but we said we want hundreds/thousends of requests to challange the system, we want to see the benefit of FaaS over fully loaded monolith - can we enlarge the workload to give FaaS better results?
+```
+
+## 2026-07-21T20:26:43Z
+
+```
+write all the tasks summary into "full_throughput_test.md" - this file will be the context for recording this work in the final report by our other agent. make sure you miss nothing - from idea, code generation, testing, change in perspective, and the surprising results when soubled the number of transactions.
+```
+
+## 2026-07-21T20:30:40Z
+
+```
+give me a one-line commit message for the added uncommited files
+```
