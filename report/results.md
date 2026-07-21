@@ -177,3 +177,24 @@ shows both truths at once. Correctness under the ticket rush (locks/txn off,
 the default): Traditional double-sold 3/20 seats, FaaS 20/20 (naive load/save
 lost-update; a *different* bug class from the (f) attribution leak — both go to
 0 with `--lock --txn`). Chart: `results/mixed_burst/chart_naranja14.png`.
+
+### (h) sweep — non-linearity of GIL starvation (`results/mixed_burst/sweep_noisy_neighbor.png`)
+
+Sweeping the medal phase's per-call cost (`for it in 125000 250000 500000
+1000000 2000000; do python3 -m bench.mixed_burst --iterations $it --json-out ...;
+done`) turns the isolation gap into a scaling law. naranja14:
+
+| iters/call | medal Trad (s) | medal FaaS (s) | speedup | background Trad (s) | background FaaS (s) |
+|---|---|---|---|---|---|
+| 125k | 5.4 | 3.3 | 1.6× | 8.5 | 55.4 |
+| 250k | 10.7 | 3.3 | 3.3× | 13.8 | 51.1 |
+| 500k | 21.3 | 4.7 | 4.6× | 24.4 | 56.5 |
+| 1M | 42.5 | 6.5 | 6.5× | 45.6 | 54.9 |
+| 2M | 84.4 | 11.8 | 7.1× | 87.4 | 49.4 |
+
+`background` = completion time of the *unrelated* background_trickle phase.
+Traditional is flat (~8.5 s) until the medal phase overtakes the background
+window (knee ~0.2M iters), then climbs linearly to 87 s; FaaS stays flat
+(~50-56 s, dominated by its per-call tax, *not* by the heavy neighbor). The two
+cross near 1M iters: past there FaaS's slower-but-isolated baseline wins outright.
+The FaaS speedup on the medal phase itself grows 1.6× → 7.1× with load.

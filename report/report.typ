@@ -289,20 +289,27 @@ so a heavy neighbour cannot steal their CPU. This extends fault isolation
 (#link(<ax-d>)[§4(d)]) from *crashes* to *performance*, in the monolith one heavy
 caller silently degrades every unrelated request; FaaS contains the blast radius.
 
-#table(
-  columns: (auto, auto, auto),
-  align: (left, right, right),
-  inset: 4pt,
-  [*Background-op latency during the medal spike*], [*Traditional*], [*FaaS*],
-  [median (vs. outside the spike)], [527 ms (2.7 ms)], [290 ms (976 ms)],
-  [inflation caused by the heavy neighbour], [*194×*], [*0.3× (none)*],
-)
-
 The honest counterweight is the same overhead as #link(<ax-a>)[§4(a)]: for cheap,
 high-frequency state ops, FaaS's per-call subprocess + sqlite tax makes it far
 slower per operation (the ticket-rush phase: Traditional *0.5 s* vs FaaS
 *22.9 s*). The mixed test shows both truths at once, so it is evidence for the
 balance, not a one-sided win.
+
+Sweeping the medal phase's per-call cost turns the isolation gap into a scaling
+law. The monolith's *unrelated* background work stays flat until the spike
+outgrows its time window (a knee near 0.2 M iterations), then climbs *linearly*
+with the heavy load, all the way to *87 s*; FaaS stays flat and immune. The two
+lines cross near 1 M iterations: FaaS is the slower baseline (its per-op tax) but,
+because it never degrades, past the crossover it wins outright on isolation alone.
+
+#figure(
+  image("fig/sweep_noisy_neighbor.png", width: 100%),
+  caption: [Sweeping the medal phase's per-call cost (naranja14). Left: the
+    CPU-bound phase, where FaaS's parallel win grows with load (1.6× to 7.1×).
+    Right: completion time of *unrelated* background work, a hockey-stick on the
+    monolith (starved once the spike overtakes the background window) but flat on
+    FaaS (isolated); the lines cross near 1 M iterations.],
+)
 
 == Where the cycles go (flamegraphs)
 
