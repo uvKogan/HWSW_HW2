@@ -6,8 +6,9 @@ Linux 5.15, **Python 3.10.12**, `perf`. **Cross-check host:** an 8-core box
 are from naranja14 unless labelled "cross-check". Reproduce with `./script.sh`
 or the individual `python3 -m bench.*` commands.
 
-Balanced but FaaS-favored: Traditional wins the two sequential/stateful axes
-(a, b); FaaS wins the four isolation/elasticity/correctness axes (c, d, e, f).
+Traditional wins the two sequential/stateful axes (a, b); FaaS wins the
+isolation/elasticity/correctness axes (c, c2, d, e, f). On balance FaaS comes
+out ahead.
 
 ## (a) Per-call overhead — base 2000-event workload (`perf stat`)
 

@@ -29,12 +29,13 @@ monolith* — the path of least resistance when nothing forces structure — and
 the FaaS side as the platform naturally guides you, one small function per file.
 The comparison then evaluates the four dimensions the assignment asks about —
 performance, extensibility, maintainability, and security — and shows where each
-model's defining traits help and hurt. We keep the axes Traditional genuinely
-wins (per-call latency, state growth, atomic cross-cutting change), but the
-overall balance favors FaaS: it wins parallel throughput, load-spike resilience,
-crash resilience, idle cost, *and* prevents a whole class of bug by construction. The two builds are
-*independent implementations* (no shared business logic), each validated by its
-own unit tests; they still agree byte-for-byte on a 2000-event replay.
+model's defining traits help and hurt. Traditional genuinely wins on per-call
+latency, state growth, and atomic cross-cutting change; FaaS wins on parallel
+throughput, load-spike resilience, crash resilience, and idle cost, *and*
+prevents a whole class of bug by construction — so on balance FaaS comes out
+ahead. The two builds are *independent implementations* (no shared business
+logic), each validated by its own unit tests; they still agree byte-for-byte on
+a 2000-event replay.
 
 = Part 1 — Traditional Architecture (naive monolith)
 
@@ -272,7 +273,7 @@ guest's virtual PMU *counts* correctly (`perf stat -e cycles` works), yet
 `perf record -F 999` (frequency-mode sampling) captured *zero* samples. Cause:
 the virtualized PMU overflow interrupt is slow, so the guest kernel repeatedly
 logged "interrupt took too long" and throttled `perf_event_max_sample_rate`
-toward zero, starving frequency mode — not a missing PMU. The fix needs no
+toward zero, starving frequency mode — not a missing PMU (Since we already used it in the last HW). The fix needs no
 restart: switch from a target frequency to a *fixed sampling period*
 (`perf record -c 2000000`), which samples every N cycles and sidesteps the
 retuning entirely. (Two further guest quirks: CPython built without frame
@@ -286,8 +287,9 @@ in-memory state and no spawn cost are hard to beat. Its single shared process is
 also its liability: it cannot use multiple cores (c), one crash takes everything
 down (d), it costs memory around the clock (e), and its shared memory invites
 correctness bugs the isolated model cannot have (f). Three honesty caveats: the
-monolith is *deliberately naive* — a well-engineered one would keep the (a,b)
-wins, though FaaS makes the good structure the default, not a discipline; the
+monolith is a *naive first draft* — the structure a team ends up with when
+nothing forces otherwise — and a well-engineered one would keep the (a,b) wins,
+though FaaS makes that good structure the default rather than a discipline; the
 work is *pure Python*, so the GIL is what makes the parallel gap in (c) so wide
 (native threads would narrow it, but the "one process ≈ one core" limit is real);
 and the KVM guest's scheduling overhead *understates* (c) versus bare metal.
@@ -311,14 +313,15 @@ process for a distributed system to lock down.
 = AI Tool Usage Disclosure
 
 We used an AI assistant (Claude Code) throughout, and disclose it fully.
-*Architectural discussion:* it helped design the "architecture as a forcing
-function" comparison — the naive-monolith-vs-decoupled-FaaS framing and the six
-axes, including where FaaS wins decisively (fault isolation, idle cost, the
-cross-request leak) and where we keep Traditional honest (per-call latency, state
-growth, atomic change). *Implementation:* it wrote much of the scenario code, the
-naive monolith, the benchmarks, and this report scaffold under our direction; we
-chose the scenario, the operations, the seat-level model, the feature, and the
-FaaS-favored tilt. *Debugging & profiling:* it set up the `perf`/flamegraph
+*Architectural discussion:* the "architecture as a forcing function" comparison —
+the naive-monolith-vs-decoupled-FaaS framing — was *our* idea; the assistant
+helped us keep it in mind through implementation, holding the monolith and the
+decoupled-FaaS structures consistent with that framing and helping shape the
+evaluation axes (parallel throughput, fault isolation, idle cost, the
+cross-request leak, and where Traditional stays ahead on per-call latency, state
+growth, and atomic change). *Implementation:* it wrote much of the scenario code,
+the naive monolith, the benchmarks, and this report scaffold under our direction;
+we chose the scenario, the operations, the seat-level model, and the feature. *Debugging & profiling:* it set up the `perf`/flamegraph
 toolchain on both hosts and produced the flamegraphs; together we diagnosed the
 KVM sampling failure in §4g — tracing zero-sample `perf record` to sample-rate
 throttling of a slow virtual PMU interrupt, fixed with a fixed-period capture.
