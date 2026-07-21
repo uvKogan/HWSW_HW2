@@ -31,8 +31,8 @@ The comparison then evaluates the four dimensions the assignment asks about —
 performance, extensibility, maintainability, and security — and shows where each
 model's defining traits help and hurt. We keep the axes Traditional genuinely
 wins (per-call latency, state growth, atomic cross-cutting change), but the
-overall balance favors FaaS: it wins parallel throughput, crash resilience, idle
-cost, *and* prevents a whole class of bug by construction. The two builds are
+overall balance favors FaaS: it wins parallel throughput, load-spike resilience,
+crash resilience, idle cost, *and* prevents a whole class of bug by construction. The two builds are
 *independent implementations* (no shared business logic), each validated by its
 own unit tests; they still agree byte-for-byte on a 2000-event replay.
 
@@ -123,7 +123,7 @@ evidence that two structurally different builds implement the same semantics.
 representative run suffices and the *ratios* — not absolute times, which shift
 with host and interpreter — are the claim.
 
-== Results — six axes
+== Results — seven axes
 
 The two models' defining traits flip the winner by workload. Scorecard first,
 then each axis in detail:
@@ -136,6 +136,7 @@ then each axis in detail:
   [(a) Per-call overhead], [Traditional], [2683× faster wall-clock],
   [(b) Latency under state growth], [Traditional], [up to 2740× faster],
   [(c) Parallel independent CPU], [*FaaS*], [7.6× (13.5× on bare metal)],
+  [(c2) Spike / load under pressure], [*FaaS*], [4.9× throughput, 24× lower p99],
   [(d) Fault isolation], [*FaaS*], [all state lost vs. 0 lost],
   [(e) Idle footprint], [*FaaS*], [17.4 MB resident vs. 0],
   [(f) Cross-request leak], [*FaaS*], [39/40 wrong vs. 0 wrong],
@@ -183,6 +184,34 @@ FaaS *3.5 s* — a *7.6× FaaS win* on the KVM guest (and *13.5×* on the bare
 8-core cross-check host, where scheduling overhead is lower). The monolith is
 one GIL-bound process pinned to ~one core; FaaS runs a process per call and uses
 every core.
+
+*(c2) Spike / load under pressure — FaaS wins.* The "DoS it and watch it degrade"
+test: we ramp simultaneous clients 8→512 and fire a 512-request burst of
+`project_medals` (200k iters) at each level, recording the latency distribution
+and sustained throughput rather than just a total.
+
+#table(
+  columns: (auto, auto, auto, auto, auto),
+  align: (right, right, right, right, right),
+  inset: 4pt,
+  [*Clients*], [*Trad req/s*], [*Trad p99 (s)*], [*FaaS req/s*], [*FaaS p99 (s)*],
+  [8], [17.3], [0.9], [89.8], [0.1],
+  [64], [17.5], [4.2], [86.4], [1.2],
+  [256], [17.6], [15.0], [86.7], [1.1],
+  [512], [17.5], [28.8], [86.5], [1.2],
+)
+
+The monolith's throughput is *pinned at \~17.5 req/s across the entire 8→512
+range* — it never scales — while its p99 tail latency grows linearly with the
+backlog (0.9 s → *28.8 s*) as every request queues behind one core. FaaS holds
+\~87 req/s with bounded \~1 s tail latency. *At peak: 4.9× throughput, 24× lower
+p99.* One might object that under load the CPU meter shows *all* cores busy, not
+one core pinned — but a direct measurement shows the monolith consumes only
+*1.02 of 8 cores*: the Linux scheduler merely migrates the single GIL-holding
+thread across cores, so each per-core bar reads \~13% instead of one at 100%.
+The flat throughput (\~8× lower than a true multicore server) and the 1.02-core
+aggregate are the ground truth; the even-looking bars are migration, not
+parallelism.
 
 *(d) Fault isolation — FaaS wins.* One poison `render_highlight` call hits a
 native-level crash (`os.abort()`, SIGABRT — a segfault/OOM class failure). In the

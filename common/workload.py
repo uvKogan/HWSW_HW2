@@ -31,11 +31,11 @@ COUNTRY_CODES = [c["code"] for c in ref.COUNTRIES]
 # blob (many matches, each with many sold seats, plus subscriptions and
 # bookings) -- that growing state is what makes the FaaS reload-per-call cost
 # visible in bench/state_growth.py. Bounded enough that ops still collide.
-N_MATCHES = 40
-N_SEATS = 200
-N_SHUTTLES = 20
-N_STREAMS = 40
-N_USERS = 200  # the full spectator pool is active in a run
+N_MATCHES = 60
+N_SEATS = 300
+N_SHUTTLES = 30
+N_STREAMS = 60
+N_USERS = 500  # the full spectator pool is active in a run
 
 OP_NAMES = [
     "book_venue_slot", "release_venue_slot", "book_ticket", "assign_volunteer",

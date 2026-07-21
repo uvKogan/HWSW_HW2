@@ -51,6 +51,9 @@ echo "== experiment: idle footprint / scale-to-zero (FaaS wins) =="
 echo "== experiment: parallel throughput, independent CPU (FaaS wins) =="
 "$PY" -m bench.parallel_throughput --tasks 32 --iterations 5000000
 
+echo "== experiment: spike / load under pressure -- latency + throughput + DoS (FaaS wins) =="
+"$PY" -m bench.spike_load --levels 8,32,64,128,256,512 --burst 512 --iterations 200000
+
 echo "== experiment: latency under state growth (Traditional wins) =="
 "$PY" -m bench.state_growth
 

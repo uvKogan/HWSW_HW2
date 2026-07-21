@@ -55,6 +55,39 @@ range. Traditional wins. (Cross-check host: 204× → 1444×.)
 cross-check host (less vCPU scheduling overhead). The monolith is one GIL-bound
 process (~1 core); FaaS runs a process per call and uses every core.
 
+## (c2) Spike / load under pressure — FaaS wins (`bench.spike_load`)
+
+The "DoS it and watch it degrade" test. A marquee event ends and spectators slam
+the live-standings endpoint (`project_medals`, 200k iters) at once. We ramp
+simultaneous clients 8→512, fire a 512-request burst at each level, and record
+the latency DISTRIBUTION and sustained throughput (naranja14, 8 vCPU):
+
+| Clients | Trad req/s | Trad p99 (ms) | FaaS req/s | FaaS p99 (ms) |
+|---|---|---|---|---|
+| 8   | 17.3 | 855   | 89.8 | 99   |
+| 32  | 17.4 | 2,283 | 87.5 | 624  |
+| 64  | 17.5 | 4,188 | 86.4 | 1,229 |
+| 128 | 17.6 | 7,756 | 86.7 | 1,079 |
+| 256 | 17.6 | 14,999 | 86.7 | 1,076 |
+| 512 | 17.5 | 28,802 | 86.5 | 1,202 |
+
+**At peak (512 clients): FaaS 4.93× the throughput and 23.96× lower p99 latency.**
+The monolith's throughput is *pinned at ~17.5 req/s across the entire 8→512 range*
+— it never scales — while its p99 tail latency grows linearly with the backlog
+(0.9 s → 28.8 s) as every request queues behind one core. FaaS holds ~87 req/s
+with bounded tail latency (~1 s): the burst is sprayed across all cores, spawn
+cost paid in parallel, not serialized. Neither side refused connections at these
+levels (`failed` = 0 throughout); the 256-deep accept backlog absorbed the connects.
+
+**"But the CPU meter showed all cores busy, not one core pinned!"** Measured
+directly (`cpu_probe`, 16-client sustained load): the monolith consumes
+**1.02 of 8 cores** (13.02 CPU-s over 12.72 s wall). The work is genuinely
+~one core's worth; the Linux scheduler just *migrates* the single GIL-holding
+thread across all 8 cores, so a per-core meter reads ~13% on each bar instead of
+100% on one. The flat 17.5 req/s throughput (would be ~8× higher if truly
+multicore) and the 1.02-core aggregate are the ground truth — the even-looking
+per-core bars are thread migration, not parallelism.
+
 ## (d) Fault isolation — FaaS wins (`bench.fault_isolation`)
 
 One poison `render_highlight(corrupt=True)` call → native crash (`os.abort()`,
