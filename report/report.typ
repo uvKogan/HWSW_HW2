@@ -371,7 +371,12 @@ the whole system's in-memory state, and indeed the #link(<ax-f>)[§4(f)] leak is
 that only exists because the monolith shares one memory space across all
 requests. The honest counterweight is that FaaS enlarges the surface to secure:
 many independent entry points and an external state store, trading one hardened
-process for a distributed system to lock down.
+process for a distributed system to lock down. A fuller confidentiality analysis
+(formal threat modeling, data-flow isolation between functions, per-function
+least-privilege scoping of the shared state store) fell outside this assignment's
+scope; we surface the #link(<ax-f>)[§4(f)] leak as concrete evidence that the axis
+matters and flag the deeper treatment as worthwhile future work, not something we
+claim to have settled here.
 
 = AI Tool Usage Disclosure
 
