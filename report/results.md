@@ -193,8 +193,8 @@ done`) turns the isolation gap into a scaling law. naranja14:
 | 2M | 84.4 | 11.8 | 7.1× | 87.4 | 49.4 |
 
 `background` = completion time of the *unrelated* background_trickle phase.
-Traditional is flat (~8.5 s) until the medal phase overtakes the background
-window (knee ~0.2M iters), then climbs linearly to 87 s; FaaS stays flat
-(~50-56 s, dominated by its per-call tax, *not* by the heavy neighbor). The two
-cross near 1M iters: past there FaaS's slower-but-isolated baseline wins outright.
-The FaaS speedup on the medal phase itself grows 1.6× → 7.1× with load.
+Traditional climbs from ~8.5 s to 87 s as the medal spike monopolizes the GIL;
+FaaS stays flat (~50-56 s, dominated by its per-call tax, *not* by the heavy
+neighbor). The two cross near 1M iters: past there FaaS's slower-but-isolated
+baseline wins outright. The FaaS speedup on the medal phase itself grows
+1.6× → 7.1× with load. Regenerate via `bench.noisy_neighbor_sweep`.

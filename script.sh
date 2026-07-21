@@ -54,6 +54,17 @@ echo "== experiment: parallel throughput, independent CPU (FaaS wins) =="
 echo "== experiment: spike / load under pressure -- latency + throughput + DoS (FaaS wins) =="
 "$PY" -m bench.spike_load --levels 8,32,64,128,256,512 --burst 512 --iterations 200000
 
+echo "== experiment: mixed realistic burst -- performance isolation / noisy neighbor (FaaS wins) =="
+"$PY" -m bench.mixed_burst --chart-out results/mixed_burst/chart.png
+
+echo "== experiment: noisy-neighbor scaling sweep -- non-linearity of GIL starvation (FaaS wins) =="
+# Sweeps the heavy phase's per-call cost; the chart step is skipped automatically
+# if matplotlib is absent (the rest is stdlib-only). Full 2M point dropped here
+# to keep the suite's wall-time reasonable; add it via --iters for the report figure.
+"$PY" -m bench.noisy_neighbor_sweep --iters 125000,250000,500000,1000000 \
+    --json-out results/mixed_burst/sweep_summary.json \
+    --chart-out results/mixed_burst/sweep_noisy_neighbor.png
+
 echo "== experiment: latency under state growth (Traditional wins) =="
 "$PY" -m bench.state_growth
 

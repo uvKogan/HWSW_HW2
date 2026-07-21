@@ -296,19 +296,20 @@ slower per operation (the ticket-rush phase: Traditional *0.5 s* vs FaaS
 balance, not a one-sided win.
 
 Sweeping the medal phase's per-call cost turns the isolation gap into a scaling
-law. The monolith's *unrelated* background work stays flat until the spike
-outgrows its time window (a knee near 0.2 M iterations), then climbs *linearly*
-with the heavy load, all the way to *87 s*; FaaS stays flat and immune. The two
-lines cross near 1 M iterations: FaaS is the slower baseline (its per-op tax) but,
-because it never degrades, past the crossover it wins outright on isolation alone.
+law. As the heavy phase grows, the monolith's *unrelated* background work climbs
+right along with it, all the way to *87 s*, because the medal spike monopolises
+the shared GIL; FaaS stays flat and immune, each call being its own process. The
+two lines cross near 1 M iterations: FaaS is the slower baseline (its per-op tax)
+but, because it never degrades, past the crossover it wins outright on isolation
+alone.
 
 #figure(
   image("fig/sweep_noisy_neighbor.png", width: 100%),
   caption: [Sweeping the medal phase's per-call cost (naranja14). Left: the
     CPU-bound phase, where FaaS's parallel win grows with load (1.6× to 7.1×).
-    Right: completion time of *unrelated* background work, a hockey-stick on the
-    monolith (starved once the spike overtakes the background window) but flat on
-    FaaS (isolated); the lines cross near 1 M iterations.],
+    Right: completion time of *unrelated* background work, rising on the monolith
+    (starved as the spike monopolises the GIL) but flat on FaaS (isolated); the
+    lines cross near 1 M iterations.],
 )
 
 == Where the cycles go (flamegraphs)
