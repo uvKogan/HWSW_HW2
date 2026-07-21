@@ -51,8 +51,9 @@ string. Its twelve operations:
   to subscribers → stream on air → recompute standings).
 - *`render_highlight`*: render a match highlight reel; a corrupted input triggers a
   native crash, our fault-injection probe (#link(<ax-d>)[§4(d)]).
-- *`project_medals`*: a CPU-bound, read-only Monte-Carlo medal projection that
-  touches no state, the embarrassingly-parallel workload behind #link(<ax-c>)[(c)] and #link(<ax-c2>)[(c2)].
+- *`project_medals`*: a CPU-bound, read-only medal *forecast* (a simplified
+  Monte-Carlo, many fixed-probability trials rather than a full statistical model),
+  touching no state; the embarrassingly-parallel workload behind #link(<ax-c>)[(c)] and #link(<ax-c2>)[(c2)].
 
 Our thesis is that *architecture acts as a forcing function*. We built the two
 systems the way each is realistically built: the Traditional side as a *naive
