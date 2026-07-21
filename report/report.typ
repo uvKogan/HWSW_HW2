@@ -6,6 +6,8 @@
 #show heading.where(level: 2): it => text(size: 10.3pt, weight: "bold")[#it]
 
 #align(center)[
+  #box(image("fig/la28.png", width: 1.6cm))
+
   #text(size: 15pt, weight: "bold")[Traditional Software Design vs Function-as-a-Service] \
   #text(size: 12pt)[An Olympic Games Management System, Built Twice] \
   #text(size: 9pt)[Matan Cohen · Yuval Kogan]
@@ -13,15 +15,41 @@
 
 = System Scenario & Thesis
 
-We model the operations backend of an *Olympic Games Management System*: the
-software that runs venues, ticketing, staffing, athlete services, live results,
-and the medal table during a Games. Entity IDs are validated against a fixed
-roster in `common/reference_data.py` (10 countries, 30 athletes, 15 volunteers,
-12 real LA-2028 venues, 200 spectator users). The nine base operations are
-`book_venue_slot` / `release_venue_slot`, `book_ticket` (reserve one *specific
-seat*), `assign_volunteer`, `dispatch_shuttle`, `reserve_restaurant_table`,
-`subscribe_to_updates` and `push_live_event` (a publish/subscribe pair), and
-`update_country_score`; `go_live` is the Part 3 extension.
+*It is the evening of the 100 m final at the LA 2028 Games.* Inside the stadium a
+volunteer scans the last of 80,000 ticket-holders to their exact seats; outside,
+shuttles ferry athletes between the village and twelve venues; in a control room
+the medal table flips the instant the photo-finish is confirmed, and the result
+reaches millions of second-screen fans a heartbeat later. Then the gun goes off,
+and the entire crowd refreshes at once. Behind all of it sits one *operations
+backend*: the software that runs venues, ticketing, staffing, athlete services,
+live results, and the medal table. We build that backend *twice*, once as a
+traditional monolith and once as a set of serverless functions, and let the
+Games' own workload decide which architecture holds up. (We come back to this
+100 m-final night in §4 (c2), when the whole stadium hits the system at once.)
+
+The system is grounded in a fixed roster (`common/reference_data.py`): 10
+countries, 30 athletes, 15 volunteers, 12 real LA-2028 venues, and 200 spectator
+users, so every ID validates against real data rather than a free-floating
+string. Its twelve operations:
+
+- *`book_venue_slot` / `release_venue_slot`*: claim or free a venue for a match; a
+  venue holds one match at a time, so a double-booking is rejected.
+- *`book_ticket`*: reserve one *specific numbered seat* for a spectator; a seat
+  already sold is refused (the seat-level model that makes the §4f leak concrete).
+- *`assign_volunteer`*: roster a volunteer to a venue for the day.
+- *`dispatch_shuttle`*: send a shuttle on a village→venue route with a seat capacity.
+- *`reserve_restaurant_table`*: seat an athlete's party (bounded size) in a village
+  dining hall.
+- *`subscribe_to_updates` / `push_live_event`*: a publish/subscribe pair; fans
+  subscribe to a match topic and start/score/finish events fan out to every subscriber.
+- *`update_country_score`*: award a gold/silver/bronze to a country and roll the
+  medal standings up.
+- *`go_live`* (Part 3): a cross-cutting cascade fired when a match starts (announce
+  to subscribers → stream on air → recompute standings).
+- *`render_highlight`*: render a match highlight reel; a corrupted input triggers a
+  native crash, our fault-injection probe (§4d).
+- *`project_medals`*: a CPU-bound, read-only Monte-Carlo medal projection that
+  touches no state, the embarrassingly-parallel workload behind (c) and (c2).
 
 Our thesis is that *architecture acts as a forcing function*. We built the two
 systems the way each is realistically built: the Traditional side as a *naive
@@ -110,19 +138,14 @@ concurrency driven by a `ThreadPoolExecutor` firing simultaneous requests; and a
 native crash injected with `os.abort()`. Each benchmark is a standalone module
 under `bench/` and is wired into `script.sh`.
 
-*Correctness & tests.* Because the two sides are now *independent*
-implementations, we validate each on its own: `common/test_operations.py` (8
-tests over the FaaS core, happy path plus a rejection per operation:
-already-sold seat, unknown country, capacity ceiling, party-size bounds) and
-`Traditional/test_monolith.py` (10 tests over the monolith, including that
-single-threaded booking is attributed correctly; the bug in §4f is
-concurrency-only). As an extra check, `common/compare_states.py` diffs the two
-final states after the replay (volatile timestamps stripped): they *match*,
-evidence that two structurally different builds implement the same semantics.
-
-*Variance.* Effects below are one-to-three orders of magnitude, so a single
-representative run suffices and the *ratios* (not absolute times, which shift
-with host and interpreter) are the claim.
+*Correctness & variance.* The two sides are *independent* implementations, each
+validated on its own: `common/test_operations.py` (8 tests over the FaaS core)
+and `Traditional/test_monolith.py` (10 tests over the monolith, including that
+single-threaded booking attributes correctly; the §4f bug is concurrency-only).
+`common/compare_states.py` confirms the two structurally different builds still
+produce matching final states after the replay. Effects below span one-to-three
+orders of magnitude, so one representative run suffices and the *ratios*, not the
+absolute times, are the claim.
 
 == Results: seven axes
 
@@ -186,10 +209,12 @@ FaaS *3.5 s*, a *7.6× FaaS win* on the KVM guest (and *13.5×* on the bare
 one GIL-bound process pinned to ~one core; FaaS runs a process per call and uses
 every core.
 
-*(c2) Spike / load under pressure: FaaS wins.* The "DoS it and watch it degrade"
-test: we ramp simultaneous clients 8→512 and fire a 512-request burst of
-`project_medals` (200k iters) at each level, recording the latency distribution
-and sustained throughput rather than just a total.
+*(c2) Spike / load under pressure: FaaS wins.* Back to the 100 m final: the gun
+fires, the result posts, and the whole stadium refreshes the live standings in
+the same second. That is the "DoS it and watch it degrade" test. We ramp
+simultaneous clients 8→512 and fire a 512-request burst of `project_medals`
+(200k iters) at each level, recording the latency distribution and sustained
+throughput rather than just a total.
 
 #table(
   columns: (auto, auto, auto, auto, auto),
@@ -258,36 +283,27 @@ on, not merely how many. The split is stark (ranges span the two hosts):
 )
 
 FaaS burns essentially *all* its cycles on infrastructure, re-importing the
-interpreter and touching sqlite on every call, with the operation itself a
-sliver too thin to see; the monolith spends its cycles on the actual work. The
-flamegraphs make this visual (full interactive SVGs in `results/flamegraphs/`):
+interpreter and touching sqlite on every call, with the operation itself a sliver
+too thin to see; the monolith, by contrast, spends its cycles on the actual work.
+The FaaS flamegraph makes it visual (both full interactive SVGs are in
+`results/flamegraphs/`):
 
 #figure(
-  image("fig/fg_traditional.png", width: 98%),
-  caption: [Traditional monolith: cycles spread across many narrow
-    business-logic towers (the actual operations).],
-)
-#figure(
   image("fig/fg_faas.png", width: 98%),
-  caption: [FaaS: the same width is dominated by wide interpreter-import /
-    process-spawn plateaus; the real operation is the invisible sliver on top.],
+  caption: [FaaS: the width is dominated by wide interpreter-import / process-spawn
+    plateaus, and the real operation is the invisible sliver on top. The monolith's
+    flamegraph (in the repo) is the mirror image: many narrow business-logic towers,
+    the actual work.],
 )
 
 This is the mechanism *behind* the aggregate blow-up in (a).
 
-*A `perf`-in-a-VM gotcha (primary host).* Because naranja14 is a KVM guest,
-capturing these flamegraphs surfaced a profiling trap worth recording. The
-guest's virtual PMU *counts* correctly (`perf stat -e cycles` works), yet
-`perf record -F 999` (frequency-mode sampling) captured *zero* samples. Cause:
-the virtualized PMU overflow interrupt is slow, so the guest kernel repeatedly
-logged "interrupt took too long" and throttled `perf_event_max_sample_rate`
-toward zero, starving frequency mode, not a missing PMU (since we already used
-it in the last HW). The fix needs no
-restart: switch from a target frequency to a *fixed sampling period*
-(`perf record -c 2000000`), which samples every N cycles and sidesteps the
-retuning entirely. (Two further guest quirks: CPython built without frame
-pointers, so we unwound with `--call-graph dwarf`; and no PEBS in the guest, so
-non-precise events only.)
+*A `perf`-in-a-VM gotcha (primary host).* On the KVM guest, `perf stat` counts
+correctly but `perf record -F 999` captured *zero* samples: the slow virtual-PMU
+overflow interrupt made the kernel throttle `perf_event_max_sample_rate` toward
+zero, starving frequency mode. The fix is a *fixed sampling period*
+(`perf record -c 2000000`) plus `--call-graph dwarf`, since CPython carries no
+frame pointers.
 
 == Reading the results (and threats to validity)
 
