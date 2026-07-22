@@ -203,3 +203,27 @@ write all the tasks summary into "full_throughput_test.md" - this file will be t
 ```
 give me a one-line commit message for the added uncommited files
 ```
+
+## 2026-07-22T06:39:48Z
+
+```
+using /superpowers we want to evaluate the work done on this project.
+the definition and expected result described in @"HW2 guide.pdf" and our report is in @report/report.typ 
+1. make sure we answer each of the requested sub-tasks individually
+2. make sure we fulfil the requirement of the project
+3. evaluate report structure, syntax, logic flow, and appearence
+
+don't change anything, you may create an md file for your summary.
+```
+
+## 2026-07-22T07:06:55Z
+
+```
+update @EVALUATION.md - are there open items?
+```
+
+## 2026-07-22T07:10:42Z
+
+```
+assuming the ids are closed - can we delete this file?
+```

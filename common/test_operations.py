@@ -1,11 +1,12 @@
 """
 Sanity tests for the pure business logic in `common.operations`.
 
-Why this exists: the end-to-end correctness gate (`common.compare_states`)
-only checks that Traditional and FaaS produce the *same* final state. Because
-both architectures run this identical module, that gate can never catch a
-business-logic bug -- both sides would compute the same wrong answer. These
-tests are the only thing that actually verifies the ops are *correct*.
+Why this exists: `common.compare_states` only checks that Traditional and FaaS
+agree on the final state after a replay. Traditional and FaaS are independent
+implementations (Traditional has its own business logic; only FaaS runs this
+module), so that agreement is evidence the two sides match, not proof either
+one is *correct*. These tests are what actually verifies this module's ops
+are correct.
 
 Run: `python -m common.test_operations`  (plain stdlib asserts, no pytest).
 """

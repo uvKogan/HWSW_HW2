@@ -79,7 +79,7 @@ reused; it grew, as monoliths do. Its defining traits: *shared mutable memory*
 (state access is O(1) and multi-step changes are naturally atomic) and *one
 long-lived process*. Those traits are also its weaknesses: the process is a
 single point of failure holding all state in memory with *no persistence*, it is
-GIL-bound to ~one CPU core, and its shared memory invites concurrency bugs. We
+GIL-bound to ≈one CPU core, and its shared memory invites concurrency bugs. We
 left one such bug in, documented: the "current request's actor" is stashed in a
 module global `_CTX` and read back when recording a seat's buyer. Correct
 single-threaded; under the threaded server two overlapping requests clobber
@@ -118,6 +118,38 @@ standings. *Which model is easier to extend depends on the change:*
   deploys and scales on its own. In the monolith the same capability means editing
   the shared `handle()` and the global state, touching the one file every other
   operation lives in, risking all of them, and redeploying the whole process.
+
+The code makes the atomicity gap concrete -- one in-process block versus three
+separate invocations with a real crash window between each:
+
+#text(size: 7pt)[
+#block(above: 0.4em, below: 0.4em)[
+#grid(
+  columns: (1fr, 1fr),
+  gutter: 8pt,
+  [*Traditional -- `server.py`, one atomic block:*
+```python
+elif op == "go_live":
+    m["status"] = "live"
+    for sub in SUBSCRIPTIONS[match_id]:
+        _log("delivery", ...)   # announce
+    STREAMS[stream_id] = {...}  # on air
+    STANDINGS["ranking"] = ...  # recompute
+    return {"ok": True, ...}
+```],
+  [*FaaS -- `orchestrators/go_live_chain.py`, three invocations:*
+```python
+steps = [("push_live_event",
+    invoke("push_live_event", {...}))]
+# crash here -> announced + notified,
+# but not streaming, standings stale
+steps.append(("allocate_stream",
+    invoke("allocate_stream", {...})))
+steps.append(("recompute_standings",
+    invoke("recompute_standings", {})))
+```],
+)
+]]
 
 = Part 4: Evaluation
 
@@ -211,7 +243,7 @@ amortises. Watch the ratio climb with N:
 `project_medals` calls (3 M iterations each) on 8 vCPUs: Traditional *26.9 s*,
 FaaS *3.5 s*, a *7.6× FaaS win* on the KVM guest (and *13.5×* on the bare
 8-core cross-check host, where scheduling overhead is lower). The monolith is
-one GIL-bound process pinned to ~one core; FaaS runs a process per call and uses
+one GIL-bound process pinned to ≈one core; FaaS runs a process per call and uses
 every core.
 
 *(c2) Spike / load under pressure: FaaS wins.*<ax-c2> Back to the 100 m final: the gun
@@ -261,7 +293,7 @@ all 8 previously-persisted seats survive (blast radius = one request).
 
 *(e) Idle footprint: FaaS wins.* The monolith is a long-lived process holding
 *17.4 MB* resident while completely idle; FaaS scales to zero: *0 MB, no process*
-between calls, materialising one for ~44 ms only while a call runs.
+between calls, materialising one for ≈44 ms only while a call runs.
 
 *(f) Cross-request state leak: FaaS wins by construction.*<ax-f> 40 concurrent
 bookings, each a distinct seat and distinct user (no seat contention). The
