@@ -11,7 +11,7 @@
 
   #text(size: 15pt, weight: "bold")[Traditional Software Design vs Function-as-a-Service] \
   #text(size: 12pt)[An Olympic Games Management System, Built Twice] \
-  #text(size: 9pt)[Matan Cohen · Yuval Kogan]
+  #text(size: 9pt)[Matan Cohen · Yuval Kogan · #link("https://github.com/uvKogan/HWSW_HW2")[github.com/uvKogan/HWSW_HW2]]
 ]
 
 = System Scenario & Thesis
